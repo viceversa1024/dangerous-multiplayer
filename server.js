@@ -120,6 +120,7 @@ setInterval(() => {
     if (!room.started || room.players.size === 0) continue;
     if (now - room.startedAt >= room.roundMs) {
       room.started = false;
+      room.gallery = [];
       const leaderboard = [...room.players.values()]
         .map(p => ({ id: p.id, name: p.name, words: p.words, chars: p.chars }))
         .sort((a, b) => b.words - a.words || b.chars - a.chars);
@@ -219,16 +220,42 @@ wss.on('connection', (ws) => {
       return;
     }
 
-    if (msg.type === 'share_text' && ws.role === 'player') {
+    if (msg.type === 'submit_text' && ws.role === 'player') {
       const room = rooms.get(ws.roomCode);
       if (!room || room.started) return;
       const p = room.players.get(ws.playerId);
       if (!p) return;
       const text = String(msg.text || '').slice(0, 50000);
       if (!text.trim()) return;
-      const payload = { type: 'shared_text', from: p.name, fromId: p.id, text };
-      for (const other of room.players.values()) send(other.ws, payload);
-      if (room.host) send(room.host, payload);
+      if (!Array.isArray(room.gallery)) room.gallery = [];
+      const existing = room.gallery.findIndex(e => e.id === p.id);
+      const entry = { id: p.id, from: p.name, text };
+      if (existing >= 0) room.gallery[existing] = entry;
+      else room.gallery.push(entry);
+      if (room.host) send(room.host, { type: 'gallery_list', entries: room.gallery });
+      return;
+    }
+
+    if (msg.type === 'gallery_show' && ws.role === 'host') {
+      const room = rooms.get(ws.roomCode);
+      if (!room || !Array.isArray(room.gallery) || !room.gallery.length) return;
+      let index = -1;
+      if (typeof msg.index === 'number') index = msg.index;
+      else if (msg.id) index = room.gallery.findIndex(e => e.id === msg.id);
+      if (index < 0 || index >= room.gallery.length) return;
+      const entry = room.gallery[index];
+      const payload = { type: 'gallery_show', entry, index, total: room.gallery.length };
+      for (const p of room.players.values()) send(p.ws, payload);
+      send(ws, payload);
+      return;
+    }
+
+    if (msg.type === 'gallery_hide' && ws.role === 'host') {
+      const room = rooms.get(ws.roomCode);
+      if (!room) return;
+      const payload = { type: 'gallery_hide' };
+      for (const p of room.players.values()) send(p.ws, payload);
+      send(ws, payload);
       return;
     }
 

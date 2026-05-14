@@ -126,12 +126,14 @@
     </div>
     <div class="btn-row">
       <button class="btn primary hidden" id="copyBtn">📋 Copy to clipboard</button>
-      <button class="btn hidden" id="shareBtn">📣 Share to group</button>
       <button class="btn" onclick="location.href='/'">Leave room</button>
     </div>
-    <div id="sharedSection" class="hidden">
-      <div class="shared-label">Shared by the room</div>
-      <div id="sharedList"></div>
+    <div id="gallerySection" class="hidden">
+      <div class="shared-label"><span id="galleryHeader">Gallery</span></div>
+      <div class="shared-item">
+        <div class="who" id="galleryWho">—</div>
+        <div class="body" id="galleryBody"></div>
+      </div>
     </div>
   </div>
 </div>
@@ -158,9 +160,10 @@
   const sumChars = document.getElementById('sumChars');
   const textPreview = document.getElementById('textPreview');
   const copyBtn = document.getElementById('copyBtn');
-  const shareBtn = document.getElementById('shareBtn');
-  const sharedSection = document.getElementById('sharedSection');
-  const sharedList = document.getElementById('sharedList');
+  const gallerySection = document.getElementById('gallerySection');
+  const galleryHeader = document.getElementById('galleryHeader');
+  const galleryWho = document.getElementById('galleryWho');
+  const galleryBody = document.getElementById('galleryBody');
 
   const DOOM_MS = 5000;
   let started = false;
@@ -177,8 +180,10 @@
     if (msg.type === 'joined') {
       document.getElementById('myName').textContent = msg.name;
       myId = msg.id;
-    } else if (msg.type === 'shared_text') {
-      appendSharedText(msg.from, msg.text, msg.fromId === myId);
+    } else if (msg.type === 'gallery_show') {
+      showGalleryEntry(msg.entry, msg.index, msg.total, msg.entry.id === myId);
+    } else if (msg.type === 'gallery_hide') {
+      hideGallery();
     } else if (msg.type === 'error') {
       endTitle.textContent = 'Could not join';
       endMsg.textContent = msg.message;
@@ -187,8 +192,7 @@
       started = true;
       waitOverlay.classList.add('hidden');
       endOverlay.classList.add('hidden');
-      sharedList.innerHTML = '';
-      sharedSection.classList.add('hidden');
+      hideGallery();
       clearDoomFade();
       editor.disabled = false;
       editor.value = '';
@@ -319,16 +323,19 @@
       textPreview.textContent = text;
       textPreview.classList.remove('empty');
       copyBtn.classList.remove('hidden');
-      shareBtn.classList.remove('hidden');
-      shareBtn.disabled = false;
-      shareBtn.textContent = '📣 Share to group';
     } else {
       textPreview.textContent = '(you didn\'t write anything that survived)';
       textPreview.classList.add('empty');
       copyBtn.classList.add('hidden');
-      shareBtn.classList.add('hidden');
     }
     summarySection.classList.remove('hidden');
+    autoSubmitText();
+  }
+
+  function autoSubmitText() {
+    const text = editor.value;
+    if (!text.trim() || ws.readyState !== 1) return;
+    ws.send(JSON.stringify({ type: 'submit_text', text }));
   }
 
   copyBtn.addEventListener('click', async () => {
@@ -349,27 +356,13 @@
     }
   });
 
-  shareBtn.addEventListener('click', () => {
-    const text = editor.value;
-    if (!text.trim() || ws.readyState !== 1) return;
-    ws.send(JSON.stringify({ type: 'share_text', text }));
-    shareBtn.disabled = true;
-    shareBtn.textContent = '✓ Shared';
-  });
-
-  function appendSharedText(from, text, mine) {
-    sharedSection.classList.remove('hidden');
-    const div = document.createElement('div');
-    div.className = 'shared-item' + (mine ? ' mine' : '');
-    const who = document.createElement('div');
-    who.className = 'who';
-    who.textContent = mine ? `${from} (you)` : from;
-    const body = document.createElement('div');
-    body.className = 'body';
-    body.textContent = text;
-    div.appendChild(who); div.appendChild(body);
-    sharedList.appendChild(div);
+  function showGalleryEntry(entry, index, total, mine) {
+    gallerySection.classList.remove('hidden');
+    galleryHeader.textContent = `Gallery (${index + 1}/${total})`;
+    galleryWho.textContent = mine ? `${entry.from} (you)` : entry.from;
+    galleryBody.textContent = entry.text;
   }
+  function hideGallery() { gallerySection.classList.add('hidden'); }
 </script>
 </body>
 </html>

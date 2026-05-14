@@ -78,6 +78,21 @@
   .lb-row .lb-name { font-weight: 600; font-size: 16px; }
   .lb-row .lb-words { color: var(--good); font-weight: 700; font-variant-numeric: tabular-nums; }
   .lb-row .lb-chars { color: var(--muted); font-variant-numeric: tabular-nums; font-size: 13px; }
+  .overlay .box { max-width: 640px; }
+  .gallery-section { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border); }
+  .gallery-label { color: var(--muted); text-transform: uppercase; letter-spacing: 0.12em; font-size: 11px; margin-bottom: 8px; }
+  .gallery-label .muted-inline { text-transform: none; letter-spacing: 0; font-size: 12px; opacity: 0.8; }
+  .gallery-preview {
+    background: var(--bg); border: 1px solid var(--border); border-radius: 10px;
+    padding: 12px 14px; min-height: 80px; max-height: 220px; overflow: auto;
+    text-align: left; font-family: ui-serif, Georgia, serif; font-size: 14px; line-height: 1.55;
+    white-space: pre-wrap;
+  }
+  .gallery-preview .gp-who { font-family: ui-sans-serif, system-ui, sans-serif; color: var(--accent-2); font-weight: 700; font-size: 12px; margin-bottom: 6px; }
+  .gallery-preview .gp-empty { color: var(--muted); font-style: italic; font-family: ui-sans-serif, system-ui, sans-serif; font-size: 13px; }
+  .gallery-preview.live { border-color: var(--good); }
+  .gallery-controls { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; justify-content: center; }
+  .gallery-controls button { padding: 8px 14px; font-size: 13px; }
   .overlay .close-row { display: flex; justify-content: center; margin-top: 18px; }
   @media (max-width: 900px) {
     main { grid-template-columns: 1fr; }
@@ -127,6 +142,18 @@
     <h2>🏆 <span id="endTitle">Victory!</span></h2>
     <div class="sub" id="endSub">The round ended without a wipe.</div>
     <div id="leaderboard"></div>
+    <div class="gallery-section">
+      <div class="gallery-label">Gallery <span id="galleryCount" class="muted-inline">— waiting for submissions…</span></div>
+      <div class="gallery-preview" id="galleryPreview">
+        <div class="gp-empty">Pick someone to spotlight on every player's screen.</div>
+      </div>
+      <div class="gallery-controls">
+        <button class="secondary" id="galleryPrev" disabled>◀ Prev</button>
+        <button id="galleryShow" disabled>Show on screens</button>
+        <button class="secondary" id="galleryNext" disabled>Next ▶</button>
+        <button class="secondary" id="galleryHide" disabled>Hide</button>
+      </div>
+    </div>
     <div class="close-row"><button class="secondary" id="closeEnd">Close</button></div>
   </div>
 </div>
@@ -175,7 +202,65 @@
   const endOverlay = document.getElementById('endOverlay');
   const endSub = document.getElementById('endSub');
   const leaderboardEl = document.getElementById('leaderboard');
-  document.getElementById('closeEnd').onclick = () => endOverlay.classList.add('hidden');
+  const galleryCount = document.getElementById('galleryCount');
+  const galleryPreview = document.getElementById('galleryPreview');
+  const galleryPrev = document.getElementById('galleryPrev');
+  const galleryNext = document.getElementById('galleryNext');
+  const galleryShow = document.getElementById('galleryShow');
+  const galleryHide = document.getElementById('galleryHide');
+  let galleryEntries = [];
+  let galleryCursor = 0;
+  let galleryShownIndex = -1;
+
+  document.getElementById('closeEnd').onclick = () => {
+    endOverlay.classList.add('hidden');
+    if (galleryShownIndex >= 0) ws.send(JSON.stringify({ type: 'gallery_hide' }));
+    galleryShownIndex = -1;
+    galleryPreview.classList.remove('live');
+  };
+
+  function renderGalleryPreview() {
+    if (!galleryEntries.length) {
+      galleryPreview.innerHTML = '<div class="gp-empty">Waiting for players to submit their writing…</div>';
+      galleryCount.textContent = '— waiting for submissions…';
+      galleryPrev.disabled = galleryNext.disabled = galleryShow.disabled = true;
+      return;
+    }
+    const e = galleryEntries[galleryCursor];
+    const isLive = galleryShownIndex === galleryCursor;
+    galleryPreview.innerHTML = `<div class="gp-who">${escapeHtml(e.from)}${isLive ? ' · LIVE on player screens' : ''}</div>${escapeHtml(e.text)}`;
+    galleryPreview.classList.toggle('live', isLive);
+    galleryCount.textContent = `(${galleryCursor + 1}/${galleryEntries.length})${galleryShownIndex >= 0 ? ' · showing #' + (galleryShownIndex + 1) : ''}`;
+    galleryPrev.disabled = galleryEntries.length < 2;
+    galleryNext.disabled = galleryEntries.length < 2;
+    galleryShow.disabled = false;
+    galleryShow.textContent = isLive ? '✓ Showing' : 'Show on screens';
+  }
+
+  galleryPrev.onclick = () => {
+    if (!galleryEntries.length) return;
+    galleryCursor = (galleryCursor - 1 + galleryEntries.length) % galleryEntries.length;
+    renderGalleryPreview();
+  };
+  galleryNext.onclick = () => {
+    if (!galleryEntries.length) return;
+    galleryCursor = (galleryCursor + 1) % galleryEntries.length;
+    renderGalleryPreview();
+  };
+  galleryShow.onclick = () => {
+    if (!galleryEntries.length) return;
+    const entry = galleryEntries[galleryCursor];
+    ws.send(JSON.stringify({ type: 'gallery_show', id: entry.id }));
+    galleryShownIndex = galleryCursor;
+    galleryHide.disabled = false;
+    renderGalleryPreview();
+  };
+  galleryHide.onclick = () => {
+    ws.send(JSON.stringify({ type: 'gallery_hide' }));
+    galleryShownIndex = -1;
+    galleryHide.disabled = true;
+    renderGalleryPreview();
+  };
 
   function formatRoundDuration(ms) {
     const totalSec = Math.round(ms / 1000);
@@ -201,7 +286,20 @@
     if (msg.type === 'round_complete') {
       endSub.textContent = `The ${formatRoundDuration(msg.roundMs || 0)} round ended without a wipe.`;
       renderLeaderboard(msg.leaderboard || []);
+      galleryEntries = [];
+      galleryCursor = 0;
+      galleryShownIndex = -1;
+      galleryHide.disabled = true;
+      renderGalleryPreview();
       endOverlay.classList.remove('hidden');
+      return;
+    }
+    if (msg.type === 'gallery_list') {
+      const prevId = galleryEntries[galleryCursor] && galleryEntries[galleryCursor].id;
+      galleryEntries = msg.entries || [];
+      const idx = prevId ? galleryEntries.findIndex(e => e.id === prevId) : -1;
+      galleryCursor = idx >= 0 ? idx : Math.min(galleryCursor, Math.max(0, galleryEntries.length - 1));
+      renderGalleryPreview();
       return;
     }
     if (msg.type === 'room_created') {
@@ -242,7 +340,12 @@
 
   function escapeHtml(s) { return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
-  startBtn.onclick = () => { endOverlay.classList.add('hidden'); ws.send(JSON.stringify({ type: 'start', durationMs: selectedDurationMs, mode: selectedMode })); };
+  startBtn.onclick = () => {
+    endOverlay.classList.add('hidden');
+    if (galleryShownIndex >= 0) ws.send(JSON.stringify({ type: 'gallery_hide' }));
+    galleryShownIndex = -1;
+    ws.send(JSON.stringify({ type: 'start', durationMs: selectedDurationMs, mode: selectedMode }));
+  };
   stopBtn.onclick = () => ws.send(JSON.stringify({ type: 'stop' }));
 
   // Flash banner on reset events — we infer resets when started and all players' idle drops to ~0 simultaneously.
