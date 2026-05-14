@@ -198,15 +198,42 @@
   let currentRoundMs = 300_000;
   let myId = null;
 
+  const SESSION_KEY = `dw_player_${code}`;
+  function loadSession() {
+    try { return JSON.parse(sessionStorage.getItem(SESSION_KEY) || 'null'); } catch { return null; }
+  }
+  function saveSession(patch) {
+    const cur = loadSession() || { code, name };
+    const next = { ...cur, ...patch, code, name };
+    try { sessionStorage.setItem(SESSION_KEY, JSON.stringify(next)); } catch {}
+  }
+  function clearSession() { try { sessionStorage.removeItem(SESSION_KEY); } catch {} }
+
+  const saved = loadSession();
+  if (saved && saved.text) {
+    editor.value = saved.text;
+    lastInputLen = saved.text.length;
+  }
+
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
   const ws = new WebSocket(`${proto}://${location.host}`);
-  ws.onopen = () => ws.send(JSON.stringify({ type: 'join_room', code, name }));
+  ws.onopen = () => {
+    const token = saved && saved.token;
+    ws.send(JSON.stringify({ type: 'join_room', code, name, token }));
+  };
 
   ws.onmessage = (ev) => {
     const msg = JSON.parse(ev.data);
     if (msg.type === 'joined') {
       document.getElementById('myName').textContent = msg.name;
       myId = msg.id;
+      if (msg.token) saveSession({ token: msg.token });
+      if (msg.resumed) {
+        updateWords();
+        if (editor.value) {
+          ws.send(JSON.stringify({ type: 'keystroke', words: countWords(editor.value), chars: editor.value.length }));
+        }
+      }
     } else if (msg.type === 'gallery_show') {
       showGalleryEntry(msg.entry, msg.index, msg.total, msg.entry.id === myId);
     } else if (msg.type === 'gallery_hide') {
@@ -223,6 +250,7 @@
       clearDoomFade();
       editor.disabled = false;
       editor.value = '';
+      saveSession({ text: '' });
       lastInputLen = 0;
       updateWords();
       if (typeof msg.roundMs === 'number') { currentRoundMs = msg.roundMs; updateRoundClock(msg.roundMs); }
@@ -247,6 +275,7 @@
       endOverlay.classList.remove('hidden');
     } else if (msg.type === 'reset') {
       editor.value = '';
+      saveSession({ text: '' });
       lastInputLen = 0;
       updateWords();
       if (typeof msg.roundMs === 'number') { currentRoundMs = msg.roundMs; updateRoundClock(msg.roundMs); }
@@ -280,6 +309,7 @@
   };
 
   editor.addEventListener('input', () => {
+    saveSession({ text: editor.value });
     const len = editor.value.length;
     const grew = len > lastInputLen;
     lastInputLen = len;

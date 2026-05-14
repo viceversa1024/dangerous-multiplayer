@@ -9,6 +9,11 @@ const ALLOWED_ROUND_MS = new Set([60_000, 300_000, 600_000]);
 const DEFAULT_ROUND_MS = 300_000;
 const ALLOWED_MODES = new Set(['iased', 'classic']);
 const DEFAULT_MODE = 'iased';
+const RECONNECT_GRACE_MS = 60_000;
+
+function makeToken() {
+  return Math.random().toString(36).slice(2, 10) + Math.random().toString(36).slice(2, 10);
+}
 const TICK_MS = 200;
 
 const MIME = {
@@ -75,6 +80,12 @@ function broadcastToHost(room) {
   });
 }
 
+function leaderboardOf(room) {
+  return [...room.players.values()]
+    .map(p => ({ id: p.id, name: p.name, words: p.words, chars: p.chars }))
+    .sort((a, b) => b.words - a.words || b.chars - a.chars);
+}
+
 function playerList(room) {
   return [...room.players.values()].map(p => ({ id: p.id, name: p.name }));
 }
@@ -85,6 +96,7 @@ function broadcastDoomTimer(room) {
   const roundRemaining = Math.max(0, room.roundMs - (now - room.startedAt));
   if (room.mode === 'classic') {
     for (const p of room.players.values()) {
+      if (p.disconnected) continue;
       const remaining = Math.max(0, DOOM_MS - (now - p.lastKey));
       send(p.ws, { type: 'doom', remaining, worst: null, roundRemaining });
     }
@@ -93,6 +105,7 @@ function broadcastDoomTimer(room) {
   let minRemaining = DOOM_MS;
   let worstName = null;
   for (const p of room.players.values()) {
+    if (p.disconnected) continue;
     const remaining = Math.max(0, DOOM_MS - (now - p.lastKey));
     if (remaining < minRemaining) { minRemaining = remaining; worstName = p.name; }
   }
@@ -121,9 +134,7 @@ setInterval(() => {
     if (now - room.startedAt >= room.roundMs) {
       room.started = false;
       room.gallery = [];
-      const leaderboard = [...room.players.values()]
-        .map(p => ({ id: p.id, name: p.name, words: p.words, chars: p.chars }))
-        .sort((a, b) => b.words - a.words || b.chars - a.chars);
+      const leaderboard = leaderboardOf(room);
       for (const p of room.players.values()) send(p.ws, { type: 'round_complete' });
       if (room.host) send(room.host, { type: 'round_complete', leaderboard, roundMs: room.roundMs, prompt: room.prompt });
       broadcastToHost(room);
@@ -131,6 +142,7 @@ setInterval(() => {
     }
     if (room.mode === 'classic') {
       for (const p of room.players.values()) {
+        if (p.disconnected) continue;
         if (now - p.lastKey > DOOM_MS) {
           p.lastKey = now;
           p.words = 0;
@@ -143,6 +155,7 @@ setInterval(() => {
     } else {
       let triggered = null;
       for (const p of room.players.values()) {
+        if (p.disconnected) continue;
         if (now - p.lastKey > DOOM_MS) { triggered = p; break; }
       }
       if (triggered) {
@@ -166,12 +179,42 @@ wss.on('connection', (ws) => {
 
     if (msg.type === 'create_room') {
       const code = makeRoomCode();
-      const room = { host: ws, players: new Map(), started: false, lastReset: Date.now() };
+      const hostToken = makeToken();
+      const room = { host: ws, hostToken, players: new Map(), started: false, lastReset: Date.now() };
       rooms.set(code, room);
       ws.role = 'host';
       ws.roomCode = code;
-      send(ws, { type: 'room_created', code });
+      send(ws, { type: 'room_created', code, hostToken });
       broadcastToHost(room);
+      return;
+    }
+
+    if (msg.type === 'claim_host') {
+      const code = String(msg.code || '').toUpperCase();
+      const room = rooms.get(code);
+      if (!room || room.hostToken !== msg.hostToken) {
+        return send(ws, { type: 'host_claim_failed' });
+      }
+      if (room.host && room.host !== ws && room.host.readyState === 1) {
+        try { room.host.close(); } catch {}
+      }
+      if (room.hostDeathTimer) { clearTimeout(room.hostDeathTimer); room.hostDeathTimer = null; }
+      room.host = ws;
+      ws.role = 'host';
+      ws.roomCode = code;
+      send(ws, {
+        type: 'host_claimed',
+        code,
+        started: room.started,
+        roundMs: room.roundMs,
+        mode: room.mode,
+        prompt: room.prompt,
+      });
+      broadcastToHost(room);
+      if (!room.started && Array.isArray(room.gallery) && room.gallery.length) {
+        send(ws, { type: 'round_complete', leaderboard: leaderboardOf(room), roundMs: room.roundMs, prompt: room.prompt });
+        send(ws, { type: 'gallery_list', entries: room.gallery });
+      }
       return;
     }
 
@@ -180,17 +223,43 @@ wss.on('connection', (ws) => {
       const room = rooms.get(code);
       if (!room) return send(ws, { type: 'error', message: 'Room not found' });
       const name = (msg.name || '').trim().slice(0, 20) || 'Anonymous';
-      const id = Math.random().toString(36).slice(2, 10);
-      const player = { id, ws, name, lastKey: Date.now(), words: 0, chars: 0 };
-      room.players.set(id, player);
-      ws.role = 'player';
-      ws.roomCode = code;
-      ws.playerId = id;
-      send(ws, { type: 'joined', id, name, code });
+
+      let player = null;
+      if (msg.token) {
+        for (const p of room.players.values()) {
+          if (p.token === msg.token) { player = p; break; }
+        }
+      }
+
+      if (player) {
+        if (player.ws && player.ws !== ws && player.ws.readyState === 1) {
+          try { player.ws.close(); } catch {}
+        }
+        if (player.removeTimer) { clearTimeout(player.removeTimer); player.removeTimer = null; }
+        player.ws = ws;
+        player.disconnected = false;
+        player.lastKey = Date.now();
+        ws.role = 'player';
+        ws.roomCode = code;
+        ws.playerId = player.id;
+        send(ws, { type: 'joined', id: player.id, name: player.name, code, token: player.token, resumed: true });
+      } else {
+        const id = Math.random().toString(36).slice(2, 10);
+        const token = makeToken();
+        player = { id, ws, name, token, lastKey: Date.now(), words: 0, chars: 0, disconnected: false };
+        room.players.set(id, player);
+        ws.role = 'player';
+        ws.roomCode = code;
+        ws.playerId = id;
+        send(ws, { type: 'joined', id, name, code, token });
+      }
+
       broadcastPlayers(room);
       broadcastToHost(room);
       if (room.started) {
         send(ws, { type: 'started', roundMs: room.roundMs, mode: room.mode, prompt: room.prompt });
+      } else if (Array.isArray(room.gallery) && room.gallery.length) {
+        send(ws, { type: 'round_complete' });
       }
       return;
     }
@@ -277,17 +346,33 @@ wss.on('connection', (ws) => {
   ws.on('close', () => {
     if (ws.role === 'host' && ws.roomCode) {
       const room = rooms.get(ws.roomCode);
-      if (room) {
-        for (const p of room.players.values()) send(p.ws, { type: 'host_left' });
+      if (!room || room.host !== ws) return;
+      room.host = null;
+      if (room.hostDeathTimer) clearTimeout(room.hostDeathTimer);
+      room.hostDeathTimer = setTimeout(() => {
+        const r = rooms.get(ws.roomCode);
+        if (!r || r.host) return;
+        for (const p of r.players.values()) send(p.ws, { type: 'host_left' });
         rooms.delete(ws.roomCode);
-      }
+      }, RECONNECT_GRACE_MS);
     } else if (ws.role === 'player' && ws.roomCode) {
       const room = rooms.get(ws.roomCode);
-      if (room) {
-        room.players.delete(ws.playerId);
-        broadcastPlayers(room);
-        broadcastToHost(room);
-      }
+      if (!room) return;
+      const p = room.players.get(ws.playerId);
+      if (!p || p.ws !== ws) return;
+      p.disconnected = true;
+      if (p.removeTimer) clearTimeout(p.removeTimer);
+      p.removeTimer = setTimeout(() => {
+        const r = rooms.get(ws.roomCode);
+        if (!r) return;
+        const cur = r.players.get(ws.playerId);
+        if (!cur || !cur.disconnected) return;
+        r.players.delete(ws.playerId);
+        broadcastPlayers(r);
+        broadcastToHost(r);
+      }, RECONNECT_GRACE_MS);
+      broadcastPlayers(room);
+      broadcastToHost(room);
     }
   });
 });

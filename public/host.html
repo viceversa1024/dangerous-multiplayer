@@ -109,7 +109,7 @@
 <body>
 <header>
   <h1>⚠️ Dangerous Writing — Host</h1>
-  <a href="/" style="color: var(--muted); text-decoration: none;">Leave</a>
+  <a href="#" id="leaveLink" style="color: var(--muted); text-decoration: none;">Leave</a>
 </header>
 <main>
   <div class="panel code-panel">
@@ -210,8 +210,21 @@
   });
 
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  const HOST_KEY = 'dw_host';
+  function loadHost() { try { return JSON.parse(sessionStorage.getItem(HOST_KEY) || 'null'); } catch { return null; } }
+  function saveHost(v) { try { sessionStorage.setItem(HOST_KEY, JSON.stringify(v)); } catch {} }
+  function clearHost() { try { sessionStorage.removeItem(HOST_KEY); } catch {} }
+  document.getElementById('leaveLink').onclick = (e) => { e.preventDefault(); clearHost(); location.href = '/'; };
+
   const ws = new WebSocket(`${proto}://${location.host}`);
-  ws.onopen = () => ws.send(JSON.stringify({ type: 'create_room' }));
+  ws.onopen = () => {
+    const saved = loadHost();
+    if (saved && saved.code && saved.hostToken) {
+      ws.send(JSON.stringify({ type: 'claim_host', code: saved.code, hostToken: saved.hostToken }));
+    } else {
+      ws.send(JSON.stringify({ type: 'create_room' }));
+    }
+  };
   const endOverlay = document.getElementById('endOverlay');
   const endSub = document.getElementById('endSub');
   const leaderboardEl = document.getElementById('leaderboard');
@@ -386,6 +399,26 @@
     }
     if (msg.type === 'room_created') {
       codeEl.textContent = msg.code;
+      saveHost({ code: msg.code, hostToken: msg.hostToken });
+    } else if (msg.type === 'host_claimed') {
+      codeEl.textContent = msg.code;
+      if (msg.prompt) promptInput.value = msg.prompt;
+      if (msg.mode) {
+        selectedMode = msg.mode;
+        for (const b of modeOptions.querySelectorAll('.duration-btn')) {
+          b.classList.toggle('selected', b.dataset.mode === msg.mode);
+        }
+        modeDesc.innerHTML = MODE_DESCRIPTIONS[selectedMode] || '';
+      }
+      if (msg.roundMs) {
+        selectedDurationMs = msg.roundMs;
+        for (const b of durationOptions.querySelectorAll('.duration-btn')) {
+          b.classList.toggle('selected', Number(b.dataset.ms) === msg.roundMs);
+        }
+      }
+    } else if (msg.type === 'host_claim_failed') {
+      clearHost();
+      ws.send(JSON.stringify({ type: 'create_room' }));
     } else if (msg.type === 'host_state') {
       started = msg.started;
       startBtn.disabled = started || msg.players.length === 0;
