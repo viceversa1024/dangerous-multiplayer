@@ -36,6 +36,12 @@
     flex: 1; background: var(--panel); border: 1px solid var(--border); border-radius: 14px;
     padding: 28px; display: flex; flex-direction: column;
   }
+  .prompt-banner {
+    background: rgba(251, 191, 36, 0.08); border: 1px solid var(--accent-2); color: var(--accent-2);
+    padding: 10px 14px; border-radius: 8px; margin-bottom: 14px;
+    font-size: 14px; font-style: italic; line-height: 1.4;
+  }
+  .prompt-banner b { color: var(--fg); font-style: normal; font-weight: 700; margin-right: 6px; letter-spacing: 0.05em; text-transform: uppercase; font-size: 11px; }
   textarea {
     flex: 1; width: 100%; resize: none; background: transparent;
     border: none; outline: none; font: inherit; font-size: 18px; line-height: 1.6;
@@ -83,6 +89,7 @@
     flex: 1; overflow: auto; font-family: ui-serif, Georgia, Cambria, "Times New Roman", serif;
     font-size: 30px; line-height: 1.55; white-space: pre-wrap; color: var(--fg);
   }
+  .gallery-leave { margin-top: 20px; display: flex; justify-content: center; }
   @media (max-width: 700px) {
     .gallery-box { padding: 24px 20px; }
     .gallery-who { font-size: 22px; }
@@ -117,6 +124,7 @@
 </header>
 <main>
   <div class="editor">
+    <div id="promptBanner" class="prompt-banner hidden"></div>
     <textarea id="editor" disabled placeholder="Waiting for host to start…" spellcheck="false"></textarea>
   </div>
 </main>
@@ -153,6 +161,7 @@
     <div class="gallery-header"><span id="galleryHeader">Gallery</span></div>
     <div class="gallery-who" id="galleryWho">—</div>
     <div class="gallery-body" id="galleryBody"></div>
+    <div class="gallery-leave"><button class="btn" onclick="location.href='/'">Leave room</button></div>
   </div>
 </div>
 
@@ -221,6 +230,13 @@
       footer.textContent = msg.mode === 'classic'
         ? 'Just keep typing. If YOU stop for 5 seconds, your own text vanishes.'
         : "Just keep typing. If anyone stops for 5 seconds, everyone's text vanishes.";
+      const banner = document.getElementById('promptBanner');
+      if (msg.prompt) {
+        banner.innerHTML = `<b>Prompt:</b>${escapeHtml(' ' + msg.prompt)}`;
+        banner.classList.remove('hidden');
+      } else {
+        banner.classList.add('hidden');
+      }
       editor.focus();
     } else if (msg.type === 'stopped') {
       started = false;

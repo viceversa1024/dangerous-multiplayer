@@ -33,6 +33,12 @@
   }
   .duration-btn.selected { background: var(--accent-2); border-color: var(--accent-2); color: #1c1917; font-weight: 700; }
   .duration-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .prompt-wrap { margin-top: 24px; width: 100%; max-width: 380px; display: flex; flex-direction: column; align-items: center; gap: 8px; }
+  .prompt-wrap input {
+    width: 100%; padding: 10px 14px; border-radius: 8px; border: 1px solid var(--border);
+    background: var(--bg); color: var(--fg); font: inherit; font-size: 14px;
+  }
+  .prompt-wrap input:disabled { opacity: 0.5; }
   .mode-desc { margin-top: 10px; font-size: 13px; color: var(--muted); max-width: 380px; text-align: center; line-height: 1.45; min-height: 38px; }
   .mode-desc b { color: var(--fg); }
   .controls { margin-top: 20px; display: flex; gap: 12px; }
@@ -126,6 +132,10 @@
       </div>
       <div class="mode-desc" id="modeDesc">If <b>any</b> player stops typing for 5 seconds, <b style="color: var(--accent);">everyone's</b> text gets wiped. Cooperative panic.</div>
     </div>
+    <div class="prompt-wrap">
+      <label class="duration-label" for="promptInput">Prompt (optional)</label>
+      <input id="promptInput" type="text" maxlength="500" placeholder="e.g. Write about a stranger on a train…" />
+    </div>
     <div class="controls">
       <button id="start" disabled>Start game</button>
       <button id="stop" class="secondary" disabled>Stop</button>
@@ -154,7 +164,8 @@
       </div>
     </div>
     <div class="close-row">
-      <button class="secondary" id="downloadRecap" disabled>⬇ Download recap (.txt)</button>
+      <button class="secondary" id="copyRecap" disabled>📋 Copy recap</button>
+      <button class="secondary" id="downloadRecap" disabled>⬇ Download .txt</button>
       <button class="secondary" id="closeEnd">Close</button>
     </div>
   </div>
@@ -210,10 +221,13 @@
   const galleryNext = document.getElementById('galleryNext');
   const galleryHide = document.getElementById('galleryHide');
   const downloadRecap = document.getElementById('downloadRecap');
+  const copyRecap = document.getElementById('copyRecap');
+  const promptInput = document.getElementById('promptInput');
   let galleryEntries = [];
   let galleryCursor = 0;
   let galleryLive = false;
   let lastRoundMs = 300000;
+  let lastPrompt = '';
 
   document.getElementById('closeEnd').onclick = () => {
     endOverlay.classList.add('hidden');
@@ -273,13 +287,48 @@
     return a;
   }
 
+  function buildRecap() {
+    const entries = shuffled(galleryEntries);
+    const lines = [];
+    lines.push('Dangerous Writing — Round Recap');
+    lines.push(`Date: ${new Date().toISOString().slice(0, 10)}`);
+    lines.push(`Round length: ${formatRoundDuration(lastRoundMs)}`);
+    if (lastPrompt) lines.push(`Prompt: ${lastPrompt}`);
+    lines.push(`Submissions: ${entries.length} (names anonymized, order shuffled)`);
+    lines.push('');
+    for (let i = 0; i < entries.length; i++) {
+      lines.push(`--- Anonymous ${i + 1} ---`);
+      lines.push(entries[i].text);
+      lines.push('');
+    }
+    lines.push('Played at https://dangerous-multiplayer.fly.dev');
+    return lines.join('\n');
+  }
+
+  async function flashBtn(btn, text) {
+    const orig = btn.textContent;
+    btn.textContent = text;
+    setTimeout(() => { btn.textContent = orig; }, 1500);
+  }
+
+  copyRecap.onclick = async () => {
+    if (!galleryEntries.length) return;
+    const text = buildRecap();
+    try { await navigator.clipboard.writeText(text); }
+    catch {
+      const ta = document.createElement('textarea');
+      ta.value = text; document.body.appendChild(ta); ta.select();
+      try { document.execCommand('copy'); } catch {}
+      ta.remove();
+    }
+    flashBtn(copyRecap, '✓ Copied!');
+  };
+
   downloadRecap.onclick = () => {
     if (!galleryEntries.length) return;
-    const entries = shuffled(galleryEntries);
+    const text = buildRecap();
     const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-    const header = `Dangerous Writing — Round Recap\nDate: ${new Date().toISOString()}\nRound length: ${formatRoundDuration(lastRoundMs)}\nSubmissions: ${entries.length}\n(Names anonymized; order shuffled.)\n\n`;
-    const body = entries.map((e, i) => `--- Anonymous ${i + 1} ---\n${e.text}\n`).join('\n');
-    const blob = new Blob([header + body], { type: 'text/plain;charset=utf-8' });
+    const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url; a.download = `dangerous-writing-recap_${stamp}.txt`;
@@ -310,13 +359,15 @@
     const msg = JSON.parse(ev.data);
     if (msg.type === 'round_complete') {
       lastRoundMs = msg.roundMs || lastRoundMs;
-      endSub.textContent = `The ${formatRoundDuration(msg.roundMs || 0)} round ended without a wipe.`;
+      lastPrompt = msg.prompt || '';
+      endSub.textContent = `The ${formatRoundDuration(msg.roundMs || 0)} round ended without a wipe.${lastPrompt ? ` Prompt: "${lastPrompt}"` : ''}`;
       renderLeaderboard(msg.leaderboard || []);
       galleryEntries = [];
       galleryCursor = 0;
       galleryLive = false;
       galleryHide.disabled = true;
       downloadRecap.disabled = true;
+      copyRecap.disabled = true;
       renderGalleryPreview();
       endOverlay.classList.remove('hidden');
       return;
@@ -328,6 +379,7 @@
       const idx = prevId ? galleryEntries.findIndex(e => e.id === prevId) : -1;
       galleryCursor = idx >= 0 ? idx : Math.min(galleryCursor, Math.max(0, galleryEntries.length - 1));
       downloadRecap.disabled = galleryEntries.length === 0;
+      copyRecap.disabled = galleryEntries.length === 0;
       if (wasEmpty && galleryEntries.length > 0) broadcastCurrent();
       renderGalleryPreview();
       return;
@@ -340,6 +392,7 @@
       stopBtn.disabled = !started;
       for (const b of durationOptions.querySelectorAll('.duration-btn')) b.disabled = started;
       for (const b of modeOptions.querySelectorAll('.duration-btn')) b.disabled = started;
+      promptInput.disabled = started;
       renderPlayers(msg.players);
       if (!resetFlashTimer) {
         banner.className = 'banner' + (started ? ' live' : '');
@@ -374,7 +427,7 @@
     endOverlay.classList.add('hidden');
     if (galleryLive) ws.send(JSON.stringify({ type: 'gallery_hide' }));
     galleryLive = false;
-    ws.send(JSON.stringify({ type: 'start', durationMs: selectedDurationMs, mode: selectedMode }));
+    ws.send(JSON.stringify({ type: 'start', durationMs: selectedDurationMs, mode: selectedMode, prompt: promptInput.value.trim() }));
   };
   stopBtn.onclick = () => ws.send(JSON.stringify({ type: 'stop' }));
 

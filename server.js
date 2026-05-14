@@ -125,7 +125,7 @@ setInterval(() => {
         .map(p => ({ id: p.id, name: p.name, words: p.words, chars: p.chars }))
         .sort((a, b) => b.words - a.words || b.chars - a.chars);
       for (const p of room.players.values()) send(p.ws, { type: 'round_complete' });
-      if (room.host) send(room.host, { type: 'round_complete', leaderboard, roundMs: room.roundMs });
+      if (room.host) send(room.host, { type: 'round_complete', leaderboard, roundMs: room.roundMs, prompt: room.prompt });
       broadcastToHost(room);
       continue;
     }
@@ -200,12 +200,13 @@ wss.on('connection', (ws) => {
       const requested = Number(msg.durationMs);
       room.roundMs = ALLOWED_ROUND_MS.has(requested) ? requested : DEFAULT_ROUND_MS;
       room.mode = ALLOWED_MODES.has(msg.mode) ? msg.mode : DEFAULT_MODE;
+      room.prompt = String(msg.prompt || '').slice(0, 500);
       const now = Date.now();
       room.started = true;
       room.startedAt = now;
       for (const p of room.players.values()) { p.lastKey = now; p.words = 0; p.chars = 0; }
-      for (const p of room.players.values()) send(p.ws, { type: 'started', roundMs: room.roundMs, mode: room.mode });
-      send(ws, { type: 'started', roundMs: room.roundMs, mode: room.mode });
+      for (const p of room.players.values()) send(p.ws, { type: 'started', roundMs: room.roundMs, mode: room.mode, prompt: room.prompt });
+      send(ws, { type: 'started', roundMs: room.roundMs, mode: room.mode, prompt: room.prompt });
       broadcastToHost(room);
       return;
     }
