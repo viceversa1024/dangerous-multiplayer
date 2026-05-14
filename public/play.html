@@ -1,0 +1,375 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Writing — Dangerous Writing</title>
+<style>
+  :root {
+    --bg: #181d20; --fg: #f4f4f5; --muted: #71717a;
+    --accent: #ef4444; --accent-2: #fbbf24; --good: #22c55e;
+    --panel: #18181b; --border: #27272a;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--fg);
+    font-family: ui-sans-serif, system-ui, -apple-system, sans-serif; min-height: 100vh; }
+  body { display: flex; flex-direction: column; min-height: 100vh; transition: background 0.2s; }
+  body.warn { background: #2a1f08; }
+  body.danger { background: #2a0808; }
+  body.reset-flash { background: var(--accent) !important; }
+  header {
+    display: grid; grid-template-columns: auto 1fr auto; gap: 16px; align-items: center;
+    padding: 12px 20px; border-bottom: 1px solid var(--border); background: rgba(0,0,0,0.2);
+  }
+  .who { font-size: 14px; color: var(--muted); }
+  .who b { color: var(--fg); }
+  .timer-wrap { display: flex; flex-direction: column; align-items: center; }
+  .word-count { font-size: 14px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .round-clock {
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 14px; font-variant-numeric: tabular-nums;
+    color: var(--fg); margin-top: 4px;
+  }
+  .round-clock.low { color: var(--accent-2); }
+  main { flex: 1; display: flex; padding: 28px; }
+  .editor {
+    flex: 1; background: var(--panel); border: 1px solid var(--border); border-radius: 14px;
+    padding: 28px; display: flex; flex-direction: column;
+  }
+  textarea {
+    flex: 1; width: 100%; resize: none; background: transparent;
+    border: none; outline: none; font: inherit; font-size: 18px; line-height: 1.6;
+    font-family: ui-serif, Georgia, Cambria, "Times New Roman", serif;
+    color: var(--doom-color, var(--fg));
+    opacity: var(--doom-opacity, 1);
+    transition: color 0.15s linear, opacity 0.15s linear;
+  }
+  textarea:disabled { color: var(--muted); opacity: 1; }
+  .overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.75); display: flex; align-items: center; justify-content: center;
+    z-index: 10; padding: 24px;
+  }
+  .overlay .box { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 32px; max-width: 520px; text-align: center; }
+  .overlay h2 { margin-top: 0; }
+  .overlay .muted { color: var(--muted); }
+  .summary-stats { display: flex; justify-content: center; gap: 28px; margin: 20px 0 8px; }
+  .summary-stats .stat { display: flex; flex-direction: column; align-items: center; }
+  .summary-stats .stat .num { font-size: 30px; font-weight: 800; color: var(--good); font-variant-numeric: tabular-nums; }
+  .summary-stats .stat .lbl { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin-top: 2px; }
+  .text-preview {
+    background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+    padding: 12px 14px; margin: 12px 0 4px; font-family: ui-serif, Georgia, serif;
+    font-size: 13px; line-height: 1.5; text-align: left; max-height: 140px; overflow: auto;
+    white-space: pre-wrap; color: var(--fg);
+  }
+  .text-preview.empty { color: var(--muted); font-style: italic; }
+  .btn-row { display: flex; gap: 10px; justify-content: center; margin-top: 16px; flex-wrap: wrap; }
+  .btn {
+    padding: 12px 20px; border-radius: 10px; border: 1px solid var(--border);
+    background: transparent; color: var(--fg); cursor: pointer; font: inherit; font-size: 14px;
+  }
+  .btn.primary { background: var(--good); border-color: var(--good); color: #052e10; font-weight: 700; }
+  .btn.primary:hover { filter: brightness(1.1); }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .shared-label { margin-top: 22px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.12em; font-size: 11px; text-align: left; }
+  .shared-item {
+    background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+    padding: 10px 12px; margin-top: 8px; text-align: left;
+  }
+  .shared-item .who { font-size: 12px; color: var(--accent-2); font-weight: 700; margin-bottom: 4px; }
+  .shared-item .body { font-family: ui-serif, Georgia, serif; font-size: 13px; line-height: 1.5; white-space: pre-wrap; max-height: 160px; overflow: auto; }
+  .shared-item.mine { border-color: var(--good); }
+  .hidden { display: none !important; }
+  .reset-toast {
+    position: fixed; top: 80px; left: 50%; transform: translateX(-50%);
+    background: var(--accent); color: white; padding: 14px 22px; border-radius: 10px;
+    font-weight: 700; font-size: 16px; box-shadow: 0 8px 30px rgba(0,0,0,0.5);
+    z-index: 20; pointer-events: none; opacity: 0; transition: opacity 0.2s;
+  }
+  .reset-toast.show { opacity: 1; }
+  footer { padding: 10px 20px; text-align: center; color: var(--muted); font-size: 12px; border-top: 1px solid var(--border); }
+</style>
+</head>
+<body>
+<header>
+  <div class="who">Room <b id="roomCode">····</b> · You: <b id="myName">…</b></div>
+  <div class="timer-wrap">
+    <div class="round-clock" id="roundClock">5:00 left</div>
+  </div>
+  <div class="word-count"><span id="wordCount">0</span> words</div>
+</header>
+<main>
+  <div class="editor">
+    <textarea id="editor" disabled placeholder="Waiting for host to start…" spellcheck="false"></textarea>
+  </div>
+</main>
+<footer id="rulesFooter">Just keep typing. If anyone stops for 5 seconds, everyone's text vanishes.</footer>
+
+<div class="overlay" id="waitOverlay">
+  <div class="box">
+    <h2>You're in. 🎯</h2>
+    <p class="muted">Waiting for the host to start the round…</p>
+    <p class="muted" style="font-size: 13px;">Rules: just write. Anything. If anyone in the room stops typing for 5 seconds, <b style="color: var(--accent-2);">everyone's text gets wiped.</b></p>
+  </div>
+</div>
+
+<div class="overlay hidden" id="endOverlay">
+  <div class="box">
+    <h2 id="endTitle">Game ended.</h2>
+    <p class="muted" id="endMsg"></p>
+    <div id="summarySection" class="hidden">
+      <div class="summary-stats">
+        <div class="stat"><div class="num" id="sumWords">0</div><div class="lbl">words</div></div>
+        <div class="stat"><div class="num" id="sumChars">0</div><div class="lbl">characters</div></div>
+      </div>
+      <div class="text-preview" id="textPreview"></div>
+    </div>
+    <div class="btn-row">
+      <button class="btn primary hidden" id="copyBtn">📋 Copy to clipboard</button>
+      <button class="btn hidden" id="shareBtn">📣 Share to group</button>
+      <button class="btn" onclick="location.href='/'">Leave room</button>
+    </div>
+    <div id="sharedSection" class="hidden">
+      <div class="shared-label">Shared by the room</div>
+      <div id="sharedList"></div>
+    </div>
+  </div>
+</div>
+
+<div class="reset-toast" id="resetToast"></div>
+
+<script>
+  const params = new URLSearchParams(location.search);
+  const code = (params.get('code') || '').toUpperCase();
+  const name = params.get('name') || 'Anonymous';
+  document.getElementById('roomCode').textContent = code;
+  document.getElementById('myName').textContent = name;
+
+  const editor = document.getElementById('editor');
+  const waitOverlay = document.getElementById('waitOverlay');
+  const endOverlay = document.getElementById('endOverlay');
+  const endTitle = document.getElementById('endTitle');
+  const endMsg = document.getElementById('endMsg');
+  const wordCountEl = document.getElementById('wordCount');
+  const resetToast = document.getElementById('resetToast');
+  const roundClock = document.getElementById('roundClock');
+  const summarySection = document.getElementById('summarySection');
+  const sumWords = document.getElementById('sumWords');
+  const sumChars = document.getElementById('sumChars');
+  const textPreview = document.getElementById('textPreview');
+  const copyBtn = document.getElementById('copyBtn');
+  const shareBtn = document.getElementById('shareBtn');
+  const sharedSection = document.getElementById('sharedSection');
+  const sharedList = document.getElementById('sharedList');
+
+  const DOOM_MS = 5000;
+  let started = false;
+  let lastInputLen = 0;
+  let currentRoundMs = 300_000;
+  let myId = null;
+
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  const ws = new WebSocket(`${proto}://${location.host}`);
+  ws.onopen = () => ws.send(JSON.stringify({ type: 'join_room', code, name }));
+
+  ws.onmessage = (ev) => {
+    const msg = JSON.parse(ev.data);
+    if (msg.type === 'joined') {
+      document.getElementById('myName').textContent = msg.name;
+      myId = msg.id;
+    } else if (msg.type === 'shared_text') {
+      appendSharedText(msg.from, msg.text, msg.fromId === myId);
+    } else if (msg.type === 'error') {
+      endTitle.textContent = 'Could not join';
+      endMsg.textContent = msg.message;
+      endOverlay.classList.remove('hidden');
+    } else if (msg.type === 'started') {
+      started = true;
+      waitOverlay.classList.add('hidden');
+      endOverlay.classList.add('hidden');
+      sharedList.innerHTML = '';
+      sharedSection.classList.add('hidden');
+      clearDoomFade();
+      editor.disabled = false;
+      editor.value = '';
+      lastInputLen = 0;
+      updateWords();
+      if (typeof msg.roundMs === 'number') { currentRoundMs = msg.roundMs; updateRoundClock(msg.roundMs); }
+      const footer = document.getElementById('rulesFooter');
+      footer.textContent = msg.mode === 'classic'
+        ? 'Just keep typing. If YOU stop for 5 seconds, your own text vanishes.'
+        : "Just keep typing. If anyone stops for 5 seconds, everyone's text vanishes.";
+      editor.focus();
+    } else if (msg.type === 'stopped') {
+      started = false;
+      editor.disabled = true;
+      endTitle.textContent = 'Round ended';
+      endMsg.textContent = 'The host stopped the game.';
+      showSummary();
+      endOverlay.classList.remove('hidden');
+    } else if (msg.type === 'reset') {
+      editor.value = '';
+      lastInputLen = 0;
+      updateWords();
+      if (typeof msg.roundMs === 'number') { currentRoundMs = msg.roundMs; updateRoundClock(msg.roundMs); }
+      flashReset(msg.reason || 'someone stopped typing');
+    } else if (msg.type === 'doom') {
+      updateTimer(msg.remaining, msg.worst);
+      if (typeof msg.roundRemaining === 'number') updateRoundClock(msg.roundRemaining);
+    } else if (msg.type === 'round_complete') {
+      started = false;
+      editor.disabled = true;
+      endTitle.textContent = '🏆 Victory!';
+      endMsg.textContent = `The ${formatRoundDuration(currentRoundMs)} round ended without a wipe.`;
+      roundClock.textContent = '0:00 ⏰';
+      roundClock.classList.add('low');
+      showSummary();
+      endOverlay.classList.remove('hidden');
+    } else if (msg.type === 'host_left') {
+      started = false;
+      editor.disabled = true;
+      endTitle.textContent = 'Host disconnected';
+      endMsg.textContent = 'The host left, so the room is closed.';
+      showSummary();
+      endOverlay.classList.remove('hidden');
+    }
+  };
+  ws.onclose = () => {
+    if (!endOverlay.classList.contains('hidden')) return;
+    endTitle.textContent = 'Disconnected';
+    endMsg.textContent = 'Lost connection to the server.';
+    endOverlay.classList.remove('hidden');
+  };
+
+  editor.addEventListener('input', () => {
+    const len = editor.value.length;
+    const grew = len > lastInputLen;
+    lastInputLen = len;
+    updateWords();
+    if (!started || ws.readyState !== 1) return;
+    if (!grew) return;
+    ws.send(JSON.stringify({ type: 'keystroke', words: countWords(editor.value), chars: editor.value.length }));
+  });
+
+  function countWords(s) {
+    const trimmed = s.trim();
+    if (!trimmed) return 0;
+    return trimmed.split(/\s+/).length;
+  }
+  function updateWords() { wordCountEl.textContent = countWords(editor.value); }
+
+  const FADE_START_MS = 2000;
+  function updateTimer(remaining, _worst) {
+    const idle = Math.max(0, Math.min(DOOM_MS, DOOM_MS - remaining));
+    if (idle < FADE_START_MS) {
+      editor.style.removeProperty('--doom-color');
+      editor.style.removeProperty('--doom-opacity');
+      document.body.classList.remove('warn', 'danger');
+      return;
+    }
+    const t = Math.min(1, (idle - FADE_START_MS) / (DOOM_MS - FADE_START_MS));
+    const r = 244, g = Math.round(244 + (68 - 244) * t), b = Math.round(245 + (68 - 245) * t);
+    const opacity = (1 - 0.85 * t).toFixed(3);
+    editor.style.setProperty('--doom-color', `rgb(${r}, ${g}, ${b})`);
+    editor.style.setProperty('--doom-opacity', opacity);
+    if (t > 0.6) { document.body.classList.add('danger'); document.body.classList.remove('warn'); }
+    else { document.body.classList.add('warn'); document.body.classList.remove('danger'); }
+  }
+
+  function clearDoomFade() {
+    editor.style.removeProperty('--doom-color');
+    editor.style.removeProperty('--doom-opacity');
+    document.body.classList.remove('warn', 'danger');
+  }
+
+  function flashReset(reason) {
+    clearDoomFade();
+    resetToast.textContent = `💥 RESET — ${reason}`;
+    resetToast.classList.add('show');
+    document.body.classList.add('reset-flash');
+    setTimeout(() => {
+      resetToast.classList.remove('show');
+      document.body.classList.remove('reset-flash');
+    }, 1200);
+  }
+
+  function updateRoundClock(ms) {
+    const totalSec = Math.max(0, Math.ceil(ms / 1000));
+    const m = Math.floor(totalSec / 60);
+    const s = totalSec % 60;
+    roundClock.textContent = `${m}:${s.toString().padStart(2, '0')} left`;
+    roundClock.classList.toggle('low', ms < 30000);
+  }
+
+  function formatRoundDuration(ms) {
+    const totalSec = Math.round(ms / 1000);
+    if (totalSec < 60) return `${totalSec}-second`;
+    const m = totalSec / 60;
+    return `${m}-minute`;
+  }
+
+  function escapeHtml(s) { return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+  function showSummary() {
+    const text = editor.value;
+    const words = countWords(text);
+    sumWords.textContent = words;
+    sumChars.textContent = text.length;
+    if (text.trim()) {
+      textPreview.textContent = text;
+      textPreview.classList.remove('empty');
+      copyBtn.classList.remove('hidden');
+      shareBtn.classList.remove('hidden');
+      shareBtn.disabled = false;
+      shareBtn.textContent = '📣 Share to group';
+    } else {
+      textPreview.textContent = '(you didn\'t write anything that survived)';
+      textPreview.classList.add('empty');
+      copyBtn.classList.add('hidden');
+      shareBtn.classList.add('hidden');
+    }
+    summarySection.classList.remove('hidden');
+  }
+
+  copyBtn.addEventListener('click', async () => {
+    const text = editor.value;
+    if (!text) return;
+    try {
+      await navigator.clipboard.writeText(text);
+      const orig = copyBtn.textContent;
+      copyBtn.textContent = '✓ Copied!';
+      setTimeout(() => { copyBtn.textContent = orig; }, 1500);
+    } catch {
+      const ta = document.createElement('textarea');
+      ta.value = text; document.body.appendChild(ta); ta.select();
+      try { document.execCommand('copy'); } catch {}
+      ta.remove();
+      copyBtn.textContent = '✓ Copied!';
+      setTimeout(() => { copyBtn.textContent = '📋 Copy to clipboard'; }, 1500);
+    }
+  });
+
+  shareBtn.addEventListener('click', () => {
+    const text = editor.value;
+    if (!text.trim() || ws.readyState !== 1) return;
+    ws.send(JSON.stringify({ type: 'share_text', text }));
+    shareBtn.disabled = true;
+    shareBtn.textContent = '✓ Shared';
+  });
+
+  function appendSharedText(from, text, mine) {
+    sharedSection.classList.remove('hidden');
+    const div = document.createElement('div');
+    div.className = 'shared-item' + (mine ? ' mine' : '');
+    const who = document.createElement('div');
+    who.className = 'who';
+    who.textContent = mine ? `${from} (you)` : from;
+    const body = document.createElement('div');
+    body.className = 'body';
+    body.textContent = text;
+    div.appendChild(who); div.appendChild(body);
+    sharedList.appendChild(div);
+  }
+</script>
+</body>
+</html>

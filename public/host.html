@@ -1,0 +1,269 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Host — Dangerous Writing</title>
+<style>
+  :root {
+    --bg: #181d20; --fg: #f4f4f5; --muted: #71717a;
+    --accent: #ef4444; --accent-2: #fbbf24; --good: #22c55e;
+    --panel: #18181b; --border: #27272a;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--fg);
+    font-family: ui-sans-serif, system-ui, -apple-system, sans-serif; min-height: 100vh; }
+  body { display: grid; grid-template-rows: auto 1fr auto; min-height: 100vh; }
+  header { padding: 16px 24px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+  header h1 { margin: 0; font-size: 18px; }
+  main { display: grid; grid-template-columns: 1.2fr 1fr; gap: 24px; padding: 32px; min-height: 0; }
+  .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 16px; padding: 28px; display: flex; flex-direction: column; }
+  .code-panel { align-items: center; justify-content: center; text-align: center; }
+  .code-label { color: var(--muted); text-transform: uppercase; letter-spacing: 0.2em; font-size: 13px; margin-bottom: 12px; }
+  .code { font-family: ui-monospace, "SF Mono", monospace; font-size: 120px; font-weight: 700; letter-spacing: 0.1em; line-height: 1; color: var(--accent-2); }
+  .join-url { margin-top: 18px; color: var(--muted); font-size: 14px; }
+  .join-url b { color: var(--fg); }
+  .duration { margin-top: 24px; display: flex; flex-direction: column; align-items: center; gap: 8px; }
+  .duration-label { color: var(--muted); text-transform: uppercase; letter-spacing: 0.15em; font-size: 12px; }
+  .duration-options { display: flex; gap: 8px; }
+  .duration-btn {
+    padding: 8px 16px; border-radius: 8px; font: inherit; font-size: 14px;
+    background: transparent; border: 1px solid var(--border); color: var(--fg); cursor: pointer;
+    font-weight: 500;
+  }
+  .duration-btn.selected { background: var(--accent-2); border-color: var(--accent-2); color: #1c1917; font-weight: 700; }
+  .duration-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .mode-desc { margin-top: 10px; font-size: 13px; color: var(--muted); max-width: 380px; text-align: center; line-height: 1.45; min-height: 38px; }
+  .mode-desc b { color: var(--fg); }
+  .controls { margin-top: 20px; display: flex; gap: 12px; }
+  button {
+    font: inherit; padding: 14px 22px; border-radius: 10px; cursor: pointer;
+    background: var(--accent); border: 1px solid var(--accent); color: white; font-weight: 600;
+  }
+  button.secondary { background: transparent; color: var(--fg); border-color: var(--border); }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
+  .players { overflow: auto; }
+  .players h2 { margin-top: 0; font-size: 16px; text-transform: uppercase; letter-spacing: 0.15em; color: var(--muted); }
+  .player {
+    display: grid; grid-template-columns: 1fr auto auto; gap: 12px; align-items: center;
+    padding: 12px 14px; border: 1px solid var(--border); border-radius: 10px; margin-bottom: 10px;
+    background: #0e0e10;
+  }
+  .player .name { font-size: 18px; font-weight: 600; }
+  .player .words { color: var(--muted); font-variant-numeric: tabular-nums; font-size: 13px; }
+  .player .idle { font-family: ui-monospace, monospace; font-variant-numeric: tabular-nums; font-size: 14px; padding: 4px 8px; border-radius: 6px; background: #27272a; }
+  .player.danger .idle { background: var(--accent); color: white; }
+  .player.warn .idle { background: var(--accent-2); color: #1c1917; }
+  .empty { color: var(--muted); font-style: italic; padding: 20px; text-align: center; }
+  .banner { padding: 14px 18px; border-radius: 10px; background: #27272a; color: var(--muted); font-size: 14px; margin-bottom: 14px; }
+  .banner.live { background: var(--good); color: white; font-weight: 600; }
+  .banner.reset { background: var(--accent); color: white; font-weight: 600; }
+  footer { padding: 14px 24px; text-align: center; color: var(--muted); font-size: 12px; border-top: 1px solid var(--border); }
+  .overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.78); display: flex; align-items: center; justify-content: center;
+    z-index: 50; padding: 24px;
+  }
+  .overlay.hidden { display: none; }
+  .overlay .box { background: var(--panel); border: 1px solid var(--border); border-radius: 16px; padding: 32px; max-width: 560px; width: 100%; }
+  .overlay h2 { margin: 0 0 6px; text-align: center; font-size: 28px; }
+  .overlay .sub { color: var(--muted); text-align: center; margin-bottom: 22px; font-size: 14px; }
+  .lb-row {
+    display: grid; grid-template-columns: 32px 1fr auto auto; gap: 14px; align-items: center;
+    padding: 12px 14px; border: 1px solid var(--border); border-radius: 10px; margin-bottom: 8px;
+    background: #0e0e10;
+  }
+  .lb-row .rank { color: var(--muted); font-variant-numeric: tabular-nums; font-weight: 700; text-align: center; }
+  .lb-row.gold { border-color: var(--accent-2); }
+  .lb-row.gold .rank { color: var(--accent-2); }
+  .lb-row .lb-name { font-weight: 600; font-size: 16px; }
+  .lb-row .lb-words { color: var(--good); font-weight: 700; font-variant-numeric: tabular-nums; }
+  .lb-row .lb-chars { color: var(--muted); font-variant-numeric: tabular-nums; font-size: 13px; }
+  .overlay .close-row { display: flex; justify-content: center; margin-top: 18px; }
+  @media (max-width: 900px) {
+    main { grid-template-columns: 1fr; }
+    .code { font-size: 80px; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>⚠️ Dangerous Writing — Host</h1>
+  <a href="/" style="color: var(--muted); text-decoration: none;">Leave</a>
+</header>
+<main>
+  <div class="panel code-panel">
+    <div class="code-label">Room code</div>
+    <div class="code" id="code">····</div>
+    <div class="join-url">Players go to <b id="origin"></b> and enter this code.</div>
+    <div class="duration">
+      <div class="duration-label">Round length</div>
+      <div class="duration-options" id="durationOptions">
+        <button class="duration-btn" data-ms="60000">1 min</button>
+        <button class="duration-btn selected" data-ms="300000">5 min</button>
+        <button class="duration-btn" data-ms="600000">10 min</button>
+      </div>
+    </div>
+    <div class="duration">
+      <div class="duration-label">Mode</div>
+      <div class="duration-options" id="modeOptions">
+        <button class="duration-btn selected" data-mode="iased">If Anyone Stops, Everyone Dies</button>
+        <button class="duration-btn" data-mode="classic">Classic</button>
+      </div>
+      <div class="mode-desc" id="modeDesc">If <b>any</b> player stops typing for 5 seconds, <b style="color: var(--accent);">everyone's</b> text gets wiped. Cooperative panic.</div>
+    </div>
+    <div class="controls">
+      <button id="start" disabled>Start game</button>
+      <button id="stop" class="secondary" disabled>Stop</button>
+    </div>
+  </div>
+  <div class="panel players">
+    <div class="banner" id="banner">Waiting for players to join…</div>
+    <h2>Players</h2>
+    <div id="playerList"><div class="empty">No one has joined yet.</div></div>
+  </div>
+</main>
+<div class="overlay hidden" id="endOverlay">
+  <div class="box">
+    <h2>🏆 <span id="endTitle">Victory!</span></h2>
+    <div class="sub" id="endSub">The round ended without a wipe.</div>
+    <div id="leaderboard"></div>
+    <div class="close-row"><button class="secondary" id="closeEnd">Close</button></div>
+  </div>
+</div>
+<footer>If anyone idles for 5s, everyone's text is wiped.</footer>
+<script>
+  document.getElementById('origin').textContent = location.host;
+  const codeEl = document.getElementById('code');
+  const startBtn = document.getElementById('start');
+  const stopBtn = document.getElementById('stop');
+  const listEl = document.getElementById('playerList');
+  const banner = document.getElementById('banner');
+  let started = false;
+  let resetFlashTimer = null;
+  let selectedDurationMs = 300000;
+  let selectedMode = 'iased';
+
+  const durationOptions = document.getElementById('durationOptions');
+  durationOptions.addEventListener('click', (e) => {
+    const btn = e.target.closest('.duration-btn');
+    if (!btn || started) return;
+    selectedDurationMs = Number(btn.dataset.ms);
+    for (const b of durationOptions.querySelectorAll('.duration-btn')) {
+      b.classList.toggle('selected', b === btn);
+    }
+  });
+
+  const modeOptions = document.getElementById('modeOptions');
+  const modeDesc = document.getElementById('modeDesc');
+  const MODE_DESCRIPTIONS = {
+    iased: `If <b>any</b> player stops typing for 5 seconds, <b style="color: var(--accent);">everyone's</b> text gets wiped. Cooperative panic.`,
+    classic: `Each player has their <b>own</b> 5-second kill bar. If <b>you</b> stop, only <b>your</b> text dies — the rest of the room keeps going.`,
+  };
+  modeOptions.addEventListener('click', (e) => {
+    const btn = e.target.closest('.duration-btn');
+    if (!btn || started) return;
+    selectedMode = btn.dataset.mode;
+    for (const b of modeOptions.querySelectorAll('.duration-btn')) {
+      b.classList.toggle('selected', b === btn);
+    }
+    modeDesc.innerHTML = MODE_DESCRIPTIONS[selectedMode] || '';
+  });
+
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  const ws = new WebSocket(`${proto}://${location.host}`);
+  ws.onopen = () => ws.send(JSON.stringify({ type: 'create_room' }));
+  const endOverlay = document.getElementById('endOverlay');
+  const endSub = document.getElementById('endSub');
+  const leaderboardEl = document.getElementById('leaderboard');
+  document.getElementById('closeEnd').onclick = () => endOverlay.classList.add('hidden');
+
+  function formatRoundDuration(ms) {
+    const totalSec = Math.round(ms / 1000);
+    if (totalSec < 60) return `${totalSec}-second`;
+    return `${totalSec / 60}-minute`;
+  }
+
+  function renderLeaderboard(rows) {
+    if (!rows.length) { leaderboardEl.innerHTML = '<div class="empty">No players.</div>'; return; }
+    leaderboardEl.innerHTML = rows.map((p, i) => {
+      const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : (i + 1);
+      return `<div class="lb-row ${i === 0 ? 'gold' : ''}">
+        <div class="rank">${medal}</div>
+        <div class="lb-name">${escapeHtml(p.name)}</div>
+        <div class="lb-words">${p.words} words</div>
+        <div class="lb-chars">${p.chars} chars</div>
+      </div>`;
+    }).join('');
+  }
+
+  ws.onmessage = (ev) => {
+    const msg = JSON.parse(ev.data);
+    if (msg.type === 'round_complete') {
+      endSub.textContent = `The ${formatRoundDuration(msg.roundMs || 0)} round ended without a wipe.`;
+      renderLeaderboard(msg.leaderboard || []);
+      endOverlay.classList.remove('hidden');
+      return;
+    }
+    if (msg.type === 'room_created') {
+      codeEl.textContent = msg.code;
+    } else if (msg.type === 'host_state') {
+      started = msg.started;
+      startBtn.disabled = started || msg.players.length === 0;
+      stopBtn.disabled = !started;
+      for (const b of durationOptions.querySelectorAll('.duration-btn')) b.disabled = started;
+      for (const b of modeOptions.querySelectorAll('.duration-btn')) b.disabled = started;
+      renderPlayers(msg.players);
+      if (!resetFlashTimer) {
+        banner.className = 'banner' + (started ? ' live' : '');
+        banner.textContent = started
+          ? `Game is LIVE — ${msg.players.length} writer${msg.players.length === 1 ? '' : 's'} in peril.`
+          : (msg.players.length === 0 ? 'Waiting for players to join…' : `${msg.players.length} player${msg.players.length === 1 ? '' : 's'} ready. Press Start.`);
+      }
+    }
+  };
+  ws.onclose = () => { banner.textContent = 'Disconnected.'; banner.className = 'banner reset'; };
+
+  function renderPlayers(players) {
+    if (!players.length) { listEl.innerHTML = '<div class="empty">No one has joined yet.</div>'; return; }
+    listEl.innerHTML = players.map(p => {
+      const idleS = (p.idleMs / 1000).toFixed(1);
+      let cls = '';
+      if (started) {
+        if (p.idleMs > 3500) cls = 'danger';
+        else if (p.idleMs > 2000) cls = 'warn';
+      }
+      return `<div class="player ${cls}">
+        <div class="name">${escapeHtml(p.name)}</div>
+        <div class="words">${p.words} words</div>
+        <div class="idle">${started ? idleS + 's' : '—'}</div>
+      </div>`;
+    }).join('');
+  }
+
+  function escapeHtml(s) { return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+  startBtn.onclick = () => { endOverlay.classList.add('hidden'); ws.send(JSON.stringify({ type: 'start', durationMs: selectedDurationMs, mode: selectedMode })); };
+  stopBtn.onclick = () => ws.send(JSON.stringify({ type: 'stop' }));
+
+  // Flash banner on reset events — we infer resets when started and all players' idle drops to ~0 simultaneously.
+  // Simpler: listen for a server-sent reset via host_state... we'll just show a transient banner when idle resets.
+  // For now, we'll rely on the players' view to show the dramatic reset; host gets a brief flash via watching for sudden drops:
+  let lastMaxIdle = 0;
+  const origOnMessage = ws.onmessage;
+  ws.onmessage = (ev) => {
+    const msg = JSON.parse(ev.data);
+    if (msg.type === 'host_state' && msg.started) {
+      const maxIdle = Math.max(0, ...msg.players.map(p => p.idleMs));
+      if (lastMaxIdle > 4500 && maxIdle < 500) {
+        banner.className = 'banner reset';
+        banner.textContent = '💥 RESET — someone choked.';
+        clearTimeout(resetFlashTimer);
+        resetFlashTimer = setTimeout(() => { resetFlashTimer = null; }, 1500);
+      }
+      lastMaxIdle = maxIdle;
+    }
+    origOnMessage(ev);
+  };
+</script>
+</body>
+</html>
