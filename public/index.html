@@ -48,6 +48,12 @@
     .warning-banner { font-size: 17px; padding: 20px 16px; }
     .warning-banner .seconds { font-size: 22px; }
   }
+  .credit {
+    max-width: 720px; margin: 24px auto 0; padding: 0 24px;
+    color: var(--muted); font-size: 14px; line-height: 1.55; text-align: center;
+  }
+  .credit a { color: var(--accent-2); text-decoration: none; }
+  .credit a:hover { text-decoration: underline; }
   main { flex: 1; display: flex; align-items: center; justify-content: center; padding: 32px; }
   .card { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 32px; width: 100%; max-width: 480px; }
   h2 { margin-top: 0; }
@@ -90,6 +96,11 @@
 <div class="warning-banner">
   If <u>anyone</u> stops typing for <span class="seconds">5 seconds</span>,<br />
   <span class="wipe">everyone loses their progress.</span>
+</div>
+<div class="credit">
+  A multiplayer version of <a href="https://www.squibler.io/dangerous-writing-prompt-app" target="_blank" rel="noopener">squibler.io/dangerous-writing-prompt-app</a>.
+  One host opens a room and shares a 4-letter code; everyone joins from their own device and writes against the same 5-second kill timer.
+  Stop typing and the text dies — together (default) or just yours (Classic mode). At the end, the host can spotlight individual entries in a shared gallery and export an anonymized recap.
 </div>
 <main>
   <div class="card stack">
