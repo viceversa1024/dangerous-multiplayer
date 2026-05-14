@@ -78,22 +78,22 @@
   .lb-row .lb-name { font-weight: 600; font-size: 16px; }
   .lb-row .lb-words { color: var(--good); font-weight: 700; font-variant-numeric: tabular-nums; }
   .lb-row .lb-chars { color: var(--muted); font-variant-numeric: tabular-nums; font-size: 13px; }
-  .overlay .box { max-width: 640px; }
-  .gallery-section { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border); }
-  .gallery-label { color: var(--muted); text-transform: uppercase; letter-spacing: 0.12em; font-size: 11px; margin-bottom: 8px; }
-  .gallery-label .muted-inline { text-transform: none; letter-spacing: 0; font-size: 12px; opacity: 0.8; }
+  .overlay .box { max-width: 1000px; }
+  .gallery-section { margin-top: 24px; padding-top: 18px; border-top: 1px solid var(--border); }
+  .gallery-label { color: var(--muted); text-transform: uppercase; letter-spacing: 0.14em; font-size: 12px; margin-bottom: 10px; }
+  .gallery-label .muted-inline { text-transform: none; letter-spacing: 0; font-size: 13px; opacity: 0.8; }
   .gallery-preview {
-    background: var(--bg); border: 1px solid var(--border); border-radius: 10px;
-    padding: 12px 14px; min-height: 80px; max-height: 220px; overflow: auto;
-    text-align: left; font-family: ui-serif, Georgia, serif; font-size: 14px; line-height: 1.55;
+    background: var(--bg); border: 2px solid var(--good); border-radius: 12px;
+    padding: 22px 26px; min-height: 240px; max-height: 56vh; overflow: auto;
+    text-align: left; font-family: ui-serif, Georgia, Cambria, serif; font-size: 22px; line-height: 1.55;
     white-space: pre-wrap;
   }
-  .gallery-preview .gp-who { font-family: ui-sans-serif, system-ui, sans-serif; color: var(--accent-2); font-weight: 700; font-size: 12px; margin-bottom: 6px; }
-  .gallery-preview .gp-empty { color: var(--muted); font-style: italic; font-family: ui-sans-serif, system-ui, sans-serif; font-size: 13px; }
-  .gallery-preview.live { border-color: var(--good); }
-  .gallery-controls { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; justify-content: center; }
-  .gallery-controls button { padding: 8px 14px; font-size: 13px; }
-  .overlay .close-row { display: flex; justify-content: center; margin-top: 18px; }
+  .gallery-preview .gp-who { font-family: ui-sans-serif, system-ui, sans-serif; color: var(--accent-2); font-weight: 800; font-size: 16px; margin-bottom: 12px; letter-spacing: 0.04em; }
+  .gallery-preview .gp-empty { color: var(--muted); font-style: italic; font-family: ui-sans-serif, system-ui, sans-serif; font-size: 14px; }
+  .gallery-preview.dim { border-color: var(--border); }
+  .gallery-controls { display: flex; gap: 10px; margin-top: 14px; flex-wrap: wrap; justify-content: center; }
+  .gallery-controls button { padding: 10px 18px; font-size: 14px; }
+  .overlay .close-row { display: flex; justify-content: center; gap: 10px; margin-top: 18px; flex-wrap: wrap; }
   @media (max-width: 900px) {
     main { grid-template-columns: 1fr; }
     .code { font-size: 80px; }
@@ -145,16 +145,18 @@
     <div class="gallery-section">
       <div class="gallery-label">Gallery <span id="galleryCount" class="muted-inline">— waiting for submissions…</span></div>
       <div class="gallery-preview" id="galleryPreview">
-        <div class="gp-empty">Pick someone to spotlight on every player's screen.</div>
+        <div class="gp-empty">Waiting for players to submit their writing…</div>
       </div>
       <div class="gallery-controls">
         <button class="secondary" id="galleryPrev" disabled>◀ Prev</button>
-        <button id="galleryShow" disabled>Show on screens</button>
         <button class="secondary" id="galleryNext" disabled>Next ▶</button>
-        <button class="secondary" id="galleryHide" disabled>Hide</button>
+        <button class="secondary" id="galleryHide" disabled>Clear screens</button>
       </div>
     </div>
-    <div class="close-row"><button class="secondary" id="closeEnd">Close</button></div>
+    <div class="close-row">
+      <button class="secondary" id="downloadRecap" disabled>⬇ Download recap (.txt)</button>
+      <button class="secondary" id="closeEnd">Close</button>
+    </div>
   </div>
 </div>
 <footer>If anyone idles for 5s, everyone's text is wiped.</footer>
@@ -206,60 +208,83 @@
   const galleryPreview = document.getElementById('galleryPreview');
   const galleryPrev = document.getElementById('galleryPrev');
   const galleryNext = document.getElementById('galleryNext');
-  const galleryShow = document.getElementById('galleryShow');
   const galleryHide = document.getElementById('galleryHide');
+  const downloadRecap = document.getElementById('downloadRecap');
   let galleryEntries = [];
   let galleryCursor = 0;
-  let galleryShownIndex = -1;
+  let galleryLive = false;
+  let lastRoundMs = 300000;
 
   document.getElementById('closeEnd').onclick = () => {
     endOverlay.classList.add('hidden');
-    if (galleryShownIndex >= 0) ws.send(JSON.stringify({ type: 'gallery_hide' }));
-    galleryShownIndex = -1;
-    galleryPreview.classList.remove('live');
+    if (galleryLive) ws.send(JSON.stringify({ type: 'gallery_hide' }));
+    galleryLive = false;
   };
+
+  function broadcastCurrent() {
+    if (!galleryEntries.length) return;
+    const entry = galleryEntries[galleryCursor];
+    ws.send(JSON.stringify({ type: 'gallery_show', id: entry.id }));
+    galleryLive = true;
+    galleryHide.disabled = false;
+  }
 
   function renderGalleryPreview() {
     if (!galleryEntries.length) {
       galleryPreview.innerHTML = '<div class="gp-empty">Waiting for players to submit their writing…</div>';
+      galleryPreview.classList.add('dim');
       galleryCount.textContent = '— waiting for submissions…';
-      galleryPrev.disabled = galleryNext.disabled = galleryShow.disabled = true;
+      galleryPrev.disabled = galleryNext.disabled = true;
       return;
     }
     const e = galleryEntries[galleryCursor];
-    const isLive = galleryShownIndex === galleryCursor;
-    galleryPreview.innerHTML = `<div class="gp-who">${escapeHtml(e.from)}${isLive ? ' · LIVE on player screens' : ''}</div>${escapeHtml(e.text)}`;
-    galleryPreview.classList.toggle('live', isLive);
-    galleryCount.textContent = `(${galleryCursor + 1}/${galleryEntries.length})${galleryShownIndex >= 0 ? ' · showing #' + (galleryShownIndex + 1) : ''}`;
+    galleryPreview.innerHTML = `<div class="gp-who">${escapeHtml(e.from)}${galleryLive ? ' · LIVE on every screen' : ''}</div>${escapeHtml(e.text)}`;
+    galleryPreview.classList.toggle('dim', !galleryLive);
+    galleryCount.textContent = `(${galleryCursor + 1}/${galleryEntries.length})`;
     galleryPrev.disabled = galleryEntries.length < 2;
     galleryNext.disabled = galleryEntries.length < 2;
-    galleryShow.disabled = false;
-    galleryShow.textContent = isLive ? '✓ Showing' : 'Show on screens';
   }
 
   galleryPrev.onclick = () => {
     if (!galleryEntries.length) return;
     galleryCursor = (galleryCursor - 1 + galleryEntries.length) % galleryEntries.length;
+    broadcastCurrent();
     renderGalleryPreview();
   };
   galleryNext.onclick = () => {
     if (!galleryEntries.length) return;
     galleryCursor = (galleryCursor + 1) % galleryEntries.length;
-    renderGalleryPreview();
-  };
-  galleryShow.onclick = () => {
-    if (!galleryEntries.length) return;
-    const entry = galleryEntries[galleryCursor];
-    ws.send(JSON.stringify({ type: 'gallery_show', id: entry.id }));
-    galleryShownIndex = galleryCursor;
-    galleryHide.disabled = false;
+    broadcastCurrent();
     renderGalleryPreview();
   };
   galleryHide.onclick = () => {
     ws.send(JSON.stringify({ type: 'gallery_hide' }));
-    galleryShownIndex = -1;
+    galleryLive = false;
     galleryHide.disabled = true;
     renderGalleryPreview();
+  };
+
+  function shuffled(arr) {
+    const a = arr.slice();
+    for (let i = a.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [a[i], a[j]] = [a[j], a[i]];
+    }
+    return a;
+  }
+
+  downloadRecap.onclick = () => {
+    if (!galleryEntries.length) return;
+    const entries = shuffled(galleryEntries);
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+    const header = `Dangerous Writing — Round Recap\nDate: ${new Date().toISOString()}\nRound length: ${formatRoundDuration(lastRoundMs)}\nSubmissions: ${entries.length}\n(Names anonymized; order shuffled.)\n\n`;
+    const body = entries.map((e, i) => `--- Anonymous ${i + 1} ---\n${e.text}\n`).join('\n');
+    const blob = new Blob([header + body], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `dangerous-writing-recap_${stamp}.txt`;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
 
   function formatRoundDuration(ms) {
@@ -284,21 +309,26 @@
   ws.onmessage = (ev) => {
     const msg = JSON.parse(ev.data);
     if (msg.type === 'round_complete') {
+      lastRoundMs = msg.roundMs || lastRoundMs;
       endSub.textContent = `The ${formatRoundDuration(msg.roundMs || 0)} round ended without a wipe.`;
       renderLeaderboard(msg.leaderboard || []);
       galleryEntries = [];
       galleryCursor = 0;
-      galleryShownIndex = -1;
+      galleryLive = false;
       galleryHide.disabled = true;
+      downloadRecap.disabled = true;
       renderGalleryPreview();
       endOverlay.classList.remove('hidden');
       return;
     }
     if (msg.type === 'gallery_list') {
+      const wasEmpty = galleryEntries.length === 0;
       const prevId = galleryEntries[galleryCursor] && galleryEntries[galleryCursor].id;
       galleryEntries = msg.entries || [];
       const idx = prevId ? galleryEntries.findIndex(e => e.id === prevId) : -1;
       galleryCursor = idx >= 0 ? idx : Math.min(galleryCursor, Math.max(0, galleryEntries.length - 1));
+      downloadRecap.disabled = galleryEntries.length === 0;
+      if (wasEmpty && galleryEntries.length > 0) broadcastCurrent();
       renderGalleryPreview();
       return;
     }
@@ -342,8 +372,8 @@
 
   startBtn.onclick = () => {
     endOverlay.classList.add('hidden');
-    if (galleryShownIndex >= 0) ws.send(JSON.stringify({ type: 'gallery_hide' }));
-    galleryShownIndex = -1;
+    if (galleryLive) ws.send(JSON.stringify({ type: 'gallery_hide' }));
+    galleryLive = false;
     ws.send(JSON.stringify({ type: 'start', durationMs: selectedDurationMs, mode: selectedMode }));
   };
   stopBtn.onclick = () => ws.send(JSON.stringify({ type: 'stop' }));
