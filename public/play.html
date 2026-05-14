@@ -12,7 +12,7 @@
   }
   * { box-sizing: border-box; }
   html, body { margin: 0; background: var(--bg); color: var(--fg);
-    font-family: ui-sans-serif, system-ui, -apple-system, sans-serif; min-height: 100vh; }
+    font-family: Helvetica, Arial, sans-serif; min-height: 100vh; }
   body { display: flex; flex-direction: column; min-height: 100vh; transition: background 0.2s; }
   body.warn { background: #2a1f08; }
   body.danger { background: #2a0808; }
@@ -45,7 +45,7 @@
   textarea {
     flex: 1; width: 100%; resize: none; background: transparent;
     border: none; outline: none; font: inherit; font-size: 18px; line-height: 1.6;
-    font-family: ui-serif, Georgia, Cambria, "Times New Roman", serif;
+    font-family: Helvetica, Arial, sans-serif;
     color: var(--doom-color, var(--fg));
     opacity: var(--doom-opacity, 1);
     transition: color 0.15s linear, opacity 0.15s linear;
@@ -64,7 +64,7 @@
   .summary-stats .stat .lbl { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin-top: 2px; }
   .text-preview {
     background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
-    padding: 12px 14px; margin: 12px 0 4px; font-family: ui-serif, Georgia, serif;
+    padding: 12px 14px; margin: 12px 0 4px; font-family: Helvetica, Arial, sans-serif;
     font-size: 13px; line-height: 1.5; text-align: left; max-height: 140px; overflow: auto;
     white-space: pre-wrap; color: var(--fg);
   }
@@ -86,7 +86,7 @@
   .gallery-header { color: var(--muted); text-transform: uppercase; letter-spacing: 0.18em; font-size: 13px; }
   .gallery-who { color: var(--accent-2); font-weight: 800; font-size: 28px; margin: 6px 0 24px; }
   .gallery-body {
-    flex: 1; overflow: auto; font-family: ui-serif, Georgia, Cambria, "Times New Roman", serif;
+    flex: 1; overflow: auto; font-family: Helvetica, Arial, sans-serif;
     font-size: 30px; line-height: 1.55; white-space: pre-wrap; color: var(--fg);
   }
   .gallery-leave { margin-top: 20px; display: flex; justify-content: center; }
@@ -101,7 +101,7 @@
     padding: 10px 12px; margin-top: 8px; text-align: left;
   }
   .shared-item .who { font-size: 12px; color: var(--accent-2); font-weight: 700; margin-bottom: 4px; }
-  .shared-item .body { font-family: ui-serif, Georgia, serif; font-size: 13px; line-height: 1.5; white-space: pre-wrap; max-height: 160px; overflow: auto; }
+  .shared-item .body { font-family: Helvetica, Arial, sans-serif; font-size: 13px; line-height: 1.5; white-space: pre-wrap; max-height: 160px; overflow: auto; }
   .shared-item.mine { border-color: var(--good); }
   .hidden { display: none !important; }
   .reset-toast {
