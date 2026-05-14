@@ -14,9 +14,12 @@
   html, body { margin: 0; background: var(--bg); color: var(--fg);
     font-family: Helvetica, Arial, sans-serif; min-height: 100vh; }
   body { display: flex; flex-direction: column; min-height: 100vh; transition: background 0.2s; }
-  body.warn { background: #2a1f08; }
-  body.danger { background: #2a0808; }
   body.reset-flash { background: var(--accent) !important; }
+  .doom-vignette {
+    position: fixed; inset: 0; pointer-events: none; z-index: 5;
+    box-shadow: inset 0 0 140px 36px rgba(239, 68, 68, var(--doom-glow, 0));
+    transition: box-shadow 0.12s linear;
+  }
   header {
     display: grid; grid-template-columns: auto 1fr auto; gap: 16px; align-items: center;
     padding: 12px 20px; border-bottom: 1px solid var(--border); background: rgba(0,0,0,0.2);
@@ -115,6 +118,7 @@
 </style>
 </head>
 <body>
+<div class="doom-vignette" id="doomVignette"></div>
 <header>
   <div class="who">Room <b id="roomCode">····</b> · You: <b id="myName">…</b></div>
   <div class="timer-wrap">
@@ -327,12 +331,13 @@
   function updateWords() { wordCountEl.textContent = countWords(editor.value); }
 
   const FADE_START_MS = 2000;
+  const doomVignette = document.getElementById('doomVignette');
   function updateTimer(remaining, _worst) {
     const idle = Math.max(0, Math.min(DOOM_MS, DOOM_MS - remaining));
     if (idle < FADE_START_MS) {
       editor.style.removeProperty('--doom-color');
       editor.style.removeProperty('--doom-opacity');
-      document.body.classList.remove('warn', 'danger');
+      doomVignette.style.setProperty('--doom-glow', '0');
       return;
     }
     const t = Math.min(1, (idle - FADE_START_MS) / (DOOM_MS - FADE_START_MS));
@@ -340,14 +345,14 @@
     const opacity = (1 - 0.85 * t).toFixed(3);
     editor.style.setProperty('--doom-color', `rgb(${r}, ${g}, ${b})`);
     editor.style.setProperty('--doom-opacity', opacity);
-    if (t > 0.6) { document.body.classList.add('danger'); document.body.classList.remove('warn'); }
-    else { document.body.classList.add('warn'); document.body.classList.remove('danger'); }
+    const glow = (0.15 + 0.75 * t).toFixed(3);
+    doomVignette.style.setProperty('--doom-glow', glow);
   }
 
   function clearDoomFade() {
     editor.style.removeProperty('--doom-color');
     editor.style.removeProperty('--doom-opacity');
-    document.body.classList.remove('warn', 'danger');
+    doomVignette.style.setProperty('--doom-glow', '0');
   }
 
   function flashReset(reason) {
