@@ -179,7 +179,6 @@ wss.on('connection', (ws) => {
       const code = (msg.code || '').toUpperCase();
       const room = rooms.get(code);
       if (!room) return send(ws, { type: 'error', message: 'Room not found' });
-      if (room.started) return send(ws, { type: 'error', message: 'Game already in progress' });
       const name = (msg.name || '').trim().slice(0, 20) || 'Anonymous';
       const id = Math.random().toString(36).slice(2, 10);
       const player = { id, ws, name, lastKey: Date.now(), words: 0, chars: 0 };
@@ -190,6 +189,9 @@ wss.on('connection', (ws) => {
       send(ws, { type: 'joined', id, name, code });
       broadcastPlayers(room);
       broadcastToHost(room);
+      if (room.started) {
+        send(ws, { type: 'started', roundMs: room.roundMs, mode: room.mode, prompt: room.prompt });
+      }
       return;
     }
 
