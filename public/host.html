@@ -304,7 +304,9 @@
     const entries = shuffled(galleryEntries);
     const lines = [];
     lines.push('Dangerous Writing — Round Recap');
-    lines.push(`Date: ${new Date().toISOString().slice(0, 10)}`);
+    const d = new Date();
+    const months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+    lines.push(`Date: ${d.getDate()} ${months[d.getMonth()]}, ${d.getFullYear()}`);
     lines.push(`Round length: ${formatRoundDuration(lastRoundMs)}`);
     if (lastPrompt) lines.push(`Prompt: ${lastPrompt}`);
     lines.push(`Submissions: ${entries.length} (names anonymized, order shuffled)`);
