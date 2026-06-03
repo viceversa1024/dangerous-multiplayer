@@ -1,14 +1,17 @@
 const http = require('http');
+const https = require('https');
+const { URL } = require('url');
 const fs = require('fs');
 const path = require('path');
 const { WebSocketServer } = require('ws');
 
 const PORT = process.env.PORT || 3000;
 const DOOM_MS = 5000;
-const ALLOWED_ROUND_MS = new Set([60_000, 300_000, 600_000]);
+const MIN_ROUND_MS = 10_000;
+const MAX_ROUND_MS = 3_600_000;
 const DEFAULT_ROUND_MS = 300_000;
 const ALLOWED_MODES = new Set(['iased', 'classic']);
-const DEFAULT_MODE = 'iased';
+const DEFAULT_MODE = 'classic';
 const RECONNECT_GRACE_MS = 60_000;
 
 function makeToken() {
@@ -23,8 +26,238 @@ const MIME = {
   '.svg': 'image/svg+xml',
 };
 
+const FEEDBACK_WEBHOOK_URL = process.env.DISCORD_FEEDBACK_WEBHOOK_URL || '';
+const feedbackRate = new Map(); // ip -> [timestamps]
+const FEEDBACK_WINDOW_MS = 60_000;
+const FEEDBACK_MAX_PER_WINDOW = 5;
+
+const RECAP_DIR = process.env.RECAP_DIR
+  || (fs.existsSync('/data') ? '/data/recaps' : path.join(__dirname, '.recap-data'));
+try { fs.mkdirSync(RECAP_DIR, { recursive: true }); }
+catch (e) { console.error('failed to create RECAP_DIR', RECAP_DIR, e); }
+
+const recapCache = new Map(); // code -> data (LRU via Map iteration order)
+const RECAP_CACHE_MAX = 200;
+function cacheGet(code) {
+  if (!recapCache.has(code)) return null;
+  const v = recapCache.get(code);
+  recapCache.delete(code); recapCache.set(code, v);
+  return v;
+}
+function cacheSet(code, v) {
+  if (recapCache.has(code)) recapCache.delete(code);
+  recapCache.set(code, v);
+  if (recapCache.size > RECAP_CACHE_MAX) {
+    const oldest = recapCache.keys().next().value;
+    recapCache.delete(oldest);
+  }
+}
+
+function postToDiscord(content, webhookUrl) {
+  const url = webhookUrl || FEEDBACK_WEBHOOK_URL;
+  if (!url) return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    let u;
+    try { u = new URL(url); } catch (e) { return reject(e); }
+    const body = JSON.stringify({ content: content.slice(0, 1900) });
+    const lib = u.protocol === 'http:' ? http : https;
+    const req = lib.request({
+      method: 'POST',
+      hostname: u.hostname,
+      port: u.port || (u.protocol === 'http:' ? 80 : 443),
+      path: u.pathname + u.search,
+      headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) },
+    }, (r) => { r.resume(); r.on('end', resolve); });
+    req.on('error', reject);
+    req.write(body);
+    req.end();
+  });
+}
+
+const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+function formatRecapDate(d) { return `${d.getDate()} ${MONTHS[d.getMonth()]}, ${d.getFullYear()}`; }
+function formatRoundDuration(ms) {
+  const totalSec = Math.round(ms / 1000);
+  if (totalSec < 60) return `${totalSec}-second`;
+  return `${totalSec / 60}-minute`;
+}
+
+function shuffled(arr) {
+  const a = arr.slice();
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+function buildRecapText({ gallery, prompt, roundMs, createdAt }) {
+  const entries = shuffled(gallery);
+  const lines = [];
+  lines.push('Dangerous Writing: Round Recap');
+  lines.push(`Date: ${formatRecapDate(new Date(createdAt))}`);
+  lines.push(`Round length: ${formatRoundDuration(roundMs)}`);
+  if (prompt) lines.push(`Prompt: ${prompt}`);
+  lines.push(`Submissions: ${entries.length} (names anonymized, order shuffled)`);
+  lines.push('');
+  for (let i = 0; i < entries.length; i++) {
+    lines.push(`--- Anonymous ${i + 1} ---`);
+    lines.push(entries[i].text);
+    lines.push('');
+  }
+  return lines.join('\n').replace(/\n+$/, '\n');
+}
+
+function escapeHtml(s) {
+  return String(s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+function buildRecapHtml({ text, submissions, createdAt }) {
+  const title = `Dangerous Writing: Recap, ${formatRecapDate(new Date(createdAt))}`;
+  const desc = `${submissions} anonymized submissions from a Dangerous Writing round.`;
+  return `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="robots" content="noindex" />
+<title>${escapeHtml(title)}</title>
+<meta property="og:title" content="${escapeHtml(title)}" />
+<meta property="og:description" content="${escapeHtml(desc)}" />
+<meta name="theme-color" content="#ef4444" />
+<style>
+  :root { --bg:#181d20; --fg:#f4f4f5; --muted:#71717a; --accent:#ef4444; --accent-2:#fbbf24; --panel:#18181b; --border:#27272a; }
+  * { box-sizing: border-box; }
+  html, body { margin:0; padding:0; background:var(--bg); color:var(--fg); font-family: Helvetica, Arial, sans-serif; }
+  header { padding:18px 24px; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; }
+  header h1 { margin:0; font-size:16px; letter-spacing:0.02em; }
+  .actions { display:flex; gap:8px; align-items:center; }
+  button, .btn { font:inherit; font-size:13px; padding:8px 14px; border-radius:8px; border:1px solid var(--border); background:transparent; color:var(--fg); cursor:pointer; display:inline-block; text-decoration:none; line-height:1.2; }
+  button:hover, .btn:hover { filter: brightness(1.15); border-color: var(--accent-2); color: var(--accent-2); }
+  .btn-primary { padding: 12px 22px; font-size: 14px; color: var(--muted); }
+  .btn-primary:hover { color: var(--accent-2); border-color: var(--accent-2); }
+  main { max-width: 760px; margin: 0 auto; padding: 28px 24px 80px; }
+  pre { white-space: pre-wrap; word-wrap: break-word; font-family: Helvetica, Arial, sans-serif; font-size: 15px; line-height: 1.6; margin: 0; color: var(--fg); }
+  .footer { margin-top: 48px; display:flex; justify-content:center; }
+</style>
+</head>
+<body>
+<header>
+  <h1>⚠️ Dangerous Writing: Recap</h1>
+  <div class="actions">
+    <button id="copy">Copy</button>
+    <a class="btn" href="?txt=1" download="dangerous-writing-recap.txt">Download .txt</a>
+  </div>
+</header>
+<main>
+<pre id="body">${escapeHtml(text)}</pre>
+<div class="footer"><a class="btn btn-primary" href="/">New round</a></div>
+</main>
+<script>
+  document.getElementById('copy').onclick = async () => {
+    const base = document.getElementById('body').textContent.replace(/\\s+$/, '');
+    const t = base + '\\n\\nPlayed at ' + location.origin + '/';
+    try { await navigator.clipboard.writeText(t); }
+    catch { const ta=document.createElement('textarea'); ta.value=t; document.body.appendChild(ta); ta.select(); try{document.execCommand('copy');}catch{} ta.remove(); }
+    const b = document.getElementById('copy'); const o = b.textContent; b.textContent = '✓ Copied'; setTimeout(()=>b.textContent=o, 1200);
+  };
+</script>
+</body>
+</html>`;
+}
+
+const RECAP_CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+function makeRecapCode() {
+  let code = '';
+  for (let i = 0; i < 8; i++) code += RECAP_CODE_CHARS[Math.floor(Math.random() * RECAP_CODE_CHARS.length)];
+  return code;
+}
+
+function recapFilePath(code) { return path.join(RECAP_DIR, `${code}.json`); }
+
+async function writeRecap(code, data) {
+  const tmp = recapFilePath(code) + '.tmp';
+  const final = recapFilePath(code);
+  await fs.promises.writeFile(tmp, JSON.stringify(data));
+  await fs.promises.rename(tmp, final);
+  cacheSet(code, data);
+}
+
+async function readRecap(code) {
+  const cached = cacheGet(code);
+  if (cached) return cached;
+  const buf = await fs.promises.readFile(recapFilePath(code), 'utf8');
+  const data = JSON.parse(buf);
+  cacheSet(code, data);
+  return data;
+}
+
 const server = http.createServer((req, res) => {
+  if (req.method === 'POST' && req.url === '/feedback') {
+    const ip = (req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').split(',')[0].trim();
+    const now = Date.now();
+    const recent = (feedbackRate.get(ip) || []).filter(t => now - t < FEEDBACK_WINDOW_MS);
+    if (recent.length >= FEEDBACK_MAX_PER_WINDOW) {
+      res.writeHead(429); return res.end('Too many');
+    }
+    recent.push(now);
+    feedbackRate.set(ip, recent);
+
+    let body = '';
+    let aborted = false;
+    req.on('data', (chunk) => {
+      body += chunk;
+      if (body.length > 8000) { aborted = true; req.destroy(); }
+    });
+    req.on('end', () => {
+      if (aborted) return;
+      let data;
+      try { data = JSON.parse(body); } catch { res.writeHead(400); return res.end('Bad JSON'); }
+      const message = String(data.message || '').slice(0, 2000).trim();
+      const page = String(data.page || '').slice(0, 200);
+      if (!message) { res.writeHead(400); return res.end('Empty'); }
+      const content = `**Feedback** from \`${page || '?'}\` (ip ${ip || '?'}):\n${message}`;
+      postToDiscord(content)
+        .then(() => { res.writeHead(204); res.end(); })
+        .catch((e) => {
+          console.error('feedback webhook failed', e);
+          res.writeHead(502); res.end('Webhook failed');
+        });
+    });
+    return;
+  }
+
   let urlPath = req.url.split('?')[0];
+
+  const recapMatch = req.method === 'GET' && urlPath.match(/^\/r\/([A-Z0-9]{4,12})(\.txt)?$/);
+  if (recapMatch) {
+    const code = recapMatch[1];
+    const wantTxt = !!recapMatch[2] || /[?&]txt=1\b/.test(req.url);
+    readRecap(code).then((data) => {
+      if (wantTxt) {
+        res.writeHead(200, {
+          'Content-Type': 'text/plain; charset=utf-8',
+          'Cache-Control': 'public, max-age=3600',
+          'Content-Disposition': `inline; filename="dangerous-writing-recap_${code}.txt"`,
+        });
+        return res.end(data.text);
+      }
+      const html = buildRecapHtml(data);
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'public, max-age=3600' });
+      res.end(html);
+    }).catch((err) => {
+      if (err && err.code === 'ENOENT') {
+        res.writeHead(404, { 'Content-Type': 'text/html; charset=utf-8' });
+        return res.end('<!doctype html><meta charset=utf-8><body style="font-family:Helvetica,Arial,sans-serif;background:#181d20;color:#f4f4f5;padding:48px;text-align:center"><h1>Recap not found</h1><p style="color:#71717a">That link is invalid or has been removed.</p><p><a href="/" style="color:#fbbf24">Back to dangerous-multiplayer</a></p></body>');
+      }
+      console.error('recap read failed', code, err);
+      res.writeHead(500); res.end('Server error');
+    });
+    return;
+  }
+
   if (urlPath === '/') urlPath = '/index.html';
   const filePath = path.join(__dirname, 'public', urlPath);
   if (!filePath.startsWith(path.join(__dirname, 'public'))) {
@@ -269,7 +502,8 @@ wss.on('connection', (ws) => {
       if (!room) return;
       if (room.players.size === 0) return send(ws, { type: 'error', message: 'No players yet' });
       const requested = Number(msg.durationMs);
-      room.roundMs = ALLOWED_ROUND_MS.has(requested) ? requested : DEFAULT_ROUND_MS;
+      room.roundMs = (Number.isFinite(requested) && requested >= MIN_ROUND_MS && requested <= MAX_ROUND_MS)
+        ? Math.round(requested) : DEFAULT_ROUND_MS;
       room.mode = ALLOWED_MODES.has(msg.mode) ? msg.mode : DEFAULT_MODE;
       room.prompt = String(msg.prompt || '').slice(0, 500);
       const now = Date.now();
@@ -328,6 +562,58 @@ wss.on('connection', (ws) => {
       const payload = { type: 'gallery_hide' };
       for (const p of room.players.values()) send(p.ws, payload);
       send(ws, payload);
+      return;
+    }
+
+    if (msg.type === 'share_recap' && ws.role === 'host') {
+      const room = rooms.get(ws.roomCode);
+      if (!room) return;
+      if (room.started) return send(ws, { type: 'recap_share_failed', reason: 'Round still running' });
+      if (!Array.isArray(room.gallery) || room.gallery.length === 0) {
+        return send(ws, { type: 'recap_share_failed', reason: 'No submissions yet' });
+      }
+      const createdAt = Date.now();
+      const text = buildRecapText({
+        gallery: room.gallery,
+        prompt: room.prompt || '',
+        roundMs: room.roundMs || 0,
+        createdAt,
+      });
+      const data = {
+        text,
+        prompt: room.prompt || '',
+        roundMs: room.roundMs || 0,
+        submissions: room.gallery.length,
+        createdAt,
+      };
+      const code = makeRecapCode();
+      writeRecap(code, data).then(() => {
+        const proto = msg.proto === 'http' ? 'http' : 'https';
+        const host = String(msg.host || 'dangerous-multiplayer.fly.dev').slice(0, 200);
+        const url = `${proto}://${host}/r/${code}`;
+        const dateStr = formatRecapDate(new Date(createdAt));
+        const dur = formatRoundDuration(data.roundMs);
+        const promptLine = data.prompt ? `\nPrompt: ${data.prompt.slice(0, 200)}` : '';
+        const summary = `Dangerous Writing recap · ${dateStr}\n${data.submissions} submissions · ${dur} round${promptLine}\n${url}`;
+        send(ws, { type: 'recap_shared', code, url, summary });
+      }).catch((err) => {
+        console.error('recap write failed', err);
+        send(ws, { type: 'recap_share_failed', reason: 'Server error' });
+      });
+      return;
+    }
+
+    if (msg.type === 'rename' && ws.role === 'player') {
+      const room = rooms.get(ws.roomCode);
+      if (!room) return;
+      const p = room.players.get(ws.playerId);
+      if (!p) return;
+      const name = String(msg.name || '').trim().slice(0, 20);
+      if (!name) return;
+      p.name = name;
+      send(ws, { type: 'renamed', name });
+      broadcastPlayers(room);
+      broadcastToHost(room);
       return;
     }
 

@@ -129,6 +129,9 @@
   };
   document.getElementById('host').onclick = () => { location.href = '/host.html'; };
   code.addEventListener('input', () => { code.value = code.value.toUpperCase(); });
+  const presetCode = (new URLSearchParams(location.search).get('code') || '').trim().toUpperCase().slice(0, 4);
+  if (presetCode) { code.value = presetCode; setTimeout(() => name.focus(), 0); }
 </script>
+<script src="/feedback.js" defer></script>
 </body>
 </html>

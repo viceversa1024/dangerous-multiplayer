@@ -53,6 +53,7 @@
     opacity: var(--doom-opacity, 1);
     transition: color 0.15s linear, opacity 0.15s linear;
   }
+  #editor.snap-doom, .doom-vignette.snap-doom { transition: none !important; }
   textarea:disabled { color: var(--muted); opacity: 1; }
   .overlay {
     position: fixed; inset: 0; background: rgba(0,0,0,0.75); display: flex; align-items: center; justify-content: center;
@@ -199,6 +200,7 @@
   const DOOM_MS = 5000;
   let started = false;
   let lastInputLen = 0;
+  let lastNonWsLen = 0;
   let currentRoundMs = 300_000;
   let myId = null;
 
@@ -213,10 +215,13 @@
   }
   function clearSession() { try { sessionStorage.removeItem(SESSION_KEY); } catch {} }
 
+  function nonWsLen(s) { return s.replace(/\s+/g, '').length; }
+
   const saved = loadSession();
   if (saved && saved.text) {
     editor.value = saved.text;
     lastInputLen = saved.text.length;
+    lastNonWsLen = nonWsLen(saved.text);
   }
 
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
@@ -256,6 +261,7 @@
       editor.value = '';
       saveSession({ text: '' });
       lastInputLen = 0;
+      lastNonWsLen = 0;
       updateWords();
       if (typeof msg.roundMs === 'number') { currentRoundMs = msg.roundMs; updateRoundClock(msg.roundMs); }
       const footer = document.getElementById('rulesFooter');
@@ -281,6 +287,7 @@
       editor.value = '';
       saveSession({ text: '' });
       lastInputLen = 0;
+      lastNonWsLen = 0;
       updateWords();
       if (typeof msg.roundMs === 'number') { currentRoundMs = msg.roundMs; updateRoundClock(msg.roundMs); }
       flashReset(msg.reason || 'someone stopped typing');
@@ -312,14 +319,15 @@
     endOverlay.classList.remove('hidden');
   };
 
-  editor.addEventListener('input', () => {
+editor.addEventListener('input', () => {
     saveSession({ text: editor.value });
-    const len = editor.value.length;
-    const grew = len > lastInputLen;
-    lastInputLen = len;
+    lastInputLen = editor.value.length;
+    const nwl = nonWsLen(editor.value);
+    const grewReal = nwl > lastNonWsLen;
+    lastNonWsLen = nwl;
     updateWords();
     if (!started || ws.readyState !== 1) return;
-    if (!grew) return;
+    if (!grewReal) return;
     ws.send(JSON.stringify({ type: 'keystroke', words: countWords(editor.value), chars: editor.value.length }));
   });
 
@@ -335,9 +343,7 @@
   function updateTimer(remaining, _worst) {
     const idle = Math.max(0, Math.min(DOOM_MS, DOOM_MS - remaining));
     if (idle < FADE_START_MS) {
-      editor.style.removeProperty('--doom-color');
-      editor.style.removeProperty('--doom-opacity');
-      doomVignette.style.setProperty('--doom-glow', '0');
+      clearDoomFade();
       return;
     }
     const t = Math.min(1, (idle - FADE_START_MS) / (DOOM_MS - FADE_START_MS));
@@ -350,9 +356,16 @@
   }
 
   function clearDoomFade() {
+    editor.classList.add('snap-doom');
+    doomVignette.classList.add('snap-doom');
     editor.style.removeProperty('--doom-color');
     editor.style.removeProperty('--doom-opacity');
     doomVignette.style.setProperty('--doom-glow', '0');
+    void editor.offsetWidth;
+    requestAnimationFrame(() => {
+      editor.classList.remove('snap-doom');
+      doomVignette.classList.remove('snap-doom');
+    });
   }
 
   function flashReset(reason) {
@@ -433,5 +446,6 @@
   }
   function hideGallery() { galleryOverlay.classList.add('hidden'); }
 </script>
+<script src="/feedback.js" defer></script>
 </body>
 </html>

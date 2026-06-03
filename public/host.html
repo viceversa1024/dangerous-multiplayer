@@ -13,10 +13,90 @@
   * { box-sizing: border-box; }
   html, body { margin: 0; background: var(--bg); color: var(--fg);
     font-family: Helvetica, Arial, sans-serif; min-height: 100vh; }
-  body { display: grid; grid-template-rows: auto 1fr auto; min-height: 100vh; }
+  body { display: flex; flex-direction: column; min-height: 100vh; transition: background 0.2s; }
+  body.reset-flash { background: var(--accent) !important; }
   header { padding: 16px 24px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
   header h1 { margin: 0; font-size: 18px; }
-  main { display: grid; grid-template-columns: 1.2fr 1fr; gap: 24px; padding: 32px; min-height: 0; }
+  main { flex: 1; display: flex; flex-direction: column; gap: 24px; padding: 32px; min-height: 0; }
+  .main-row { display: grid; grid-template-columns: 1.2fr 1fr; gap: 24px; }
+  .writing-panel { gap: 14px; }
+  .name-row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-bottom: 4px; }
+  .name-row label { color: var(--muted); text-transform: uppercase; letter-spacing: 0.14em; font-size: 12px; }
+  .name-row input { padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg); color: var(--fg); font: inherit; font-size: 14px; width: 200px; }
+  .name-row input:disabled { opacity: 0.5; cursor: not-allowed; }
+  .name-row .status { color: var(--muted); font-size: 13px; }
+  .name-row .status.good { color: var(--good); }
+  .name-row .status.err { color: var(--accent); }
+  .host-editor-wrap { display: flex; flex-direction: column; gap: 10px; }
+  .host-prompt-banner {
+    background: rgba(251, 191, 36, 0.08); border: 1px solid var(--accent-2); color: var(--accent-2);
+    padding: 10px 14px; border-radius: 8px; font-size: 14px; font-style: italic; line-height: 1.4;
+  }
+  .host-prompt-banner b { color: var(--fg); font-style: normal; font-weight: 700; margin-right: 6px; letter-spacing: 0.05em; text-transform: uppercase; font-size: 11px; }
+  #hostEditor {
+    width: 100%; min-height: 260px; resize: vertical; background: var(--bg);
+    border: 1px solid var(--border); border-radius: 10px; padding: 16px 18px;
+    font: inherit; font-family: Helvetica, Arial, sans-serif; font-size: 17px; line-height: 1.6;
+    color: var(--doom-color, var(--fg)); opacity: var(--doom-opacity, 1); outline: none;
+    transition: color 0.15s linear, opacity 0.15s linear;
+  }
+  #hostEditor.snap-doom, .doom-vignette.snap-doom { transition: none !important; }
+  #hostEditor:focus { border-color: var(--accent-2); }
+  #hostEditor:disabled { color: var(--muted); opacity: 1; cursor: not-allowed; }
+  .doom-vignette {
+    position: fixed; inset: 0; pointer-events: none; z-index: 5;
+    box-shadow: inset 0 0 140px 36px rgba(239, 68, 68, var(--doom-glow, 0));
+    transition: box-shadow 0.12s linear;
+  }
+  .host-editor-meta { display: flex; justify-content: space-between; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+  .host-reset-toast {
+    position: fixed; top: 80px; left: 50%; transform: translateX(-50%);
+    background: var(--accent); color: white; padding: 14px 22px; border-radius: 10px;
+    font-weight: 700; font-size: 16px; box-shadow: 0 8px 30px rgba(0,0,0,0.5);
+    z-index: 60; pointer-events: none; opacity: 0; transition: opacity 0.2s;
+  }
+  .host-reset-toast.show { opacity: 1; }
+  .host-prompt-banner.hidden { display: none; }
+  .host-tag {
+    display: inline-block; margin-left: 8px; padding: 2px 7px;
+    font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase;
+    color: var(--accent-2); border: 1px solid var(--accent-2); border-radius: 999px;
+    font-weight: 700; vertical-align: middle;
+  }
+  /* During-round compact mode */
+  body.round-live main { padding: 12px 20px; gap: 14px; }
+  body.round-live .main-row {
+    display: flex; align-items: center; gap: 14px;
+    grid-template-columns: none;
+  }
+  body.round-live .panel { padding: 10px 14px; border-radius: 10px; }
+  body.round-live .code-panel {
+    flex: 0 0 auto; flex-direction: row; align-items: center;
+    text-align: left; gap: 14px; padding: 8px 14px;
+  }
+  body.round-live .code-panel .code-label,
+  body.round-live .code-panel .join-url,
+  body.round-live .code-panel .duration,
+  body.round-live .code-panel .prompt-wrap,
+  body.round-live .code-panel #shareInvite,
+  body.round-live .code-panel #shareInviteStatus,
+  body.round-live .code-panel #start { display: none; }
+  body.round-live .code { font-size: 22px; letter-spacing: 0.05em; }
+  body.round-live .controls { margin: 0; }
+  body.round-live #stop { padding: 6px 14px; font-size: 13px; border-radius: 7px; }
+  body.round-live .players { flex: 1; padding: 6px 12px; }
+  body.round-live .players .banner { display: none; }
+  body.round-live .players h2 { display: none; }
+  body.round-live #playerList { display: flex; flex-wrap: wrap; gap: 6px; }
+  body.round-live .player {
+    display: inline-flex; align-items: center; gap: 8px; margin: 0; padding: 4px 10px;
+    grid-template-columns: none; border-radius: 999px; background: #0e0e10;
+  }
+  body.round-live .player .name { font-size: 13px; font-weight: 600; }
+  body.round-live .player .words { font-size: 11px; }
+  body.round-live .player .idle { font-size: 11px; padding: 2px 6px; }
+  body.round-live #hostWritingPanel { flex: 1; min-height: 0; }
+  body.round-live #hostEditor { min-height: 50vh; }
   .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 16px; padding: 28px; display: flex; flex-direction: column; }
   .code-panel { align-items: center; justify-content: center; text-align: center; }
   .code-label { color: var(--muted); text-transform: uppercase; letter-spacing: 0.2em; font-size: 13px; margin-bottom: 12px; }
@@ -33,12 +113,16 @@
   }
   .duration-btn.selected { background: var(--accent-2); border-color: var(--accent-2); color: #1c1917; font-weight: 700; }
   .duration-btn:disabled { opacity: 0.4; cursor: not-allowed; }
-  .prompt-wrap { margin-top: 24px; width: 100%; max-width: 380px; display: flex; flex-direction: column; align-items: center; gap: 8px; }
-  .prompt-wrap input {
+  .prompt-wrap { margin-top: 24px; width: 100%; max-width: 560px; display: flex; flex-direction: column; align-items: center; gap: 8px; }
+  .prompt-wrap input, .prompt-wrap textarea {
     width: 100%; padding: 10px 14px; border-radius: 8px; border: 1px solid var(--border);
     background: var(--bg); color: var(--fg); font: inherit; font-size: 14px;
   }
-  .prompt-wrap input:disabled { opacity: 0.5; }
+  .prompt-wrap textarea {
+    resize: none; overflow: hidden; min-height: 40px; line-height: 1.45;
+    font-family: inherit;
+  }
+  .prompt-wrap input:disabled, .prompt-wrap textarea:disabled { opacity: 0.5; }
   .mode-desc { margin-top: 10px; font-size: 13px; color: var(--muted); max-width: 380px; text-align: center; line-height: 1.45; min-height: 38px; }
   .mode-desc b { color: var(--fg); }
   .controls { margin-top: 20px; display: flex; gap: 12px; }
@@ -66,11 +150,11 @@
   .banner.reset { background: var(--accent); color: white; font-weight: 600; }
   footer { padding: 14px 24px; text-align: center; color: var(--muted); font-size: 12px; border-top: 1px solid var(--border); }
   .overlay {
-    position: fixed; inset: 0; background: rgba(0,0,0,0.78); display: flex; align-items: center; justify-content: center;
-    z-index: 50; padding: 24px;
+    position: fixed; inset: 0; background: rgba(0,0,0,0.78); display: flex;
+    z-index: 50; padding: 24px; overflow-y: auto;
   }
   .overlay.hidden { display: none; }
-  .overlay .box { background: var(--panel); border: 1px solid var(--border); border-radius: 16px; padding: 32px; max-width: 560px; width: 100%; }
+  .overlay .box { background: var(--panel); border: 1px solid var(--border); border-radius: 16px; padding: 32px; max-width: 560px; width: 100%; margin: auto; }
   .overlay h2 { margin: 0 0 6px; text-align: center; font-size: 28px; }
   .overlay .sub { color: var(--muted); text-align: center; margin-bottom: 22px; font-size: 14px; }
   .lb-row {
@@ -111,30 +195,43 @@
   <h1>⚠️ Dangerous Writing — Host</h1>
   <a href="#" id="leaveLink" style="color: var(--muted); text-decoration: none;">Leave</a>
 </header>
+<div class="doom-vignette" id="doomVignette"></div>
 <main>
+  <div class="main-row">
   <div class="panel code-panel">
     <div class="code-label">Room code</div>
     <div class="code" id="code">····</div>
     <div class="join-url">Players go to <b id="origin"></b> and enter this code.</div>
+    <button id="shareInvite" class="secondary" type="button" style="margin-top: 14px; padding: 10px 18px; font-size: 14px;" disabled>🔗 Share invite</button>
+    <div id="shareInviteStatus" style="margin-top: 8px; font-size: 12px; color: var(--muted); min-height: 16px;"></div>
     <div class="duration">
       <div class="duration-label">Round length</div>
       <div class="duration-options" id="durationOptions">
         <button class="duration-btn" data-ms="60000">1 min</button>
         <button class="duration-btn selected" data-ms="300000">5 min</button>
         <button class="duration-btn" data-ms="600000">10 min</button>
+        <button class="duration-btn" data-custom="1">Custom</button>
+      </div>
+      <div id="customDurationWrap" style="margin-top: 10px; display: none; align-items: center; gap: 8px;">
+        <input id="customDuration" type="number" min="0.25" max="60" step="0.25" value="3"
+          style="width: 80px; padding: 6px 10px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg); color: var(--fg); font: inherit; font-size: 14px; text-align: right;" />
+        <span style="color: var(--muted); font-size: 13px;">minutes (0.25 – 60)</span>
       </div>
     </div>
     <div class="duration">
       <div class="duration-label">Mode</div>
       <div class="duration-options" id="modeOptions">
-        <button class="duration-btn selected" data-mode="iased">If Anyone Stops, Everyone Dies</button>
-        <button class="duration-btn" data-mode="classic">Classic</button>
+        <button class="duration-btn" data-mode="iased">If Anyone Stops, Everyone Dies</button>
+        <button class="duration-btn selected" data-mode="classic">Classic</button>
       </div>
-      <div class="mode-desc" id="modeDesc">If <b>any</b> player stops typing for 5 seconds, <b style="color: var(--accent);">everyone's</b> text gets wiped. Cooperative panic.</div>
+      <div class="mode-desc" id="modeDesc">Each player has their <b>own</b> 5-second kill bar. If <b>you</b> stop, only <b>your</b> text dies — the rest of the room keeps going.</div>
     </div>
     <div class="prompt-wrap">
       <label class="duration-label" for="promptInput">Prompt (optional)</label>
-      <input id="promptInput" type="text" maxlength="500" placeholder="e.g. Write about a stranger on a train…" />
+      <div style="display: flex; gap: 8px; width: 100%; align-items: flex-start;">
+        <textarea id="promptInput" maxlength="500" rows="1" placeholder="e.g. Write about a stranger on a train…" style="flex: 1;"></textarea>
+        <button id="randomPromptBtn" class="duration-btn" type="button" title="Pick a random prompt" style="padding: 8px 12px; flex-shrink: 0;">🎲 Random</button>
+      </div>
     </div>
     <div class="controls">
       <button id="start" disabled>Start game</button>
@@ -146,7 +243,24 @@
     <h2>Players</h2>
     <div id="playerList"><div class="empty">No one has joined yet.</div></div>
   </div>
+  </div>
+  <section class="panel writing-panel" id="hostWritingPanel">
+    <div class="name-row">
+      <label for="hostName">Your name</label>
+      <input id="hostName" maxlength="20" autocomplete="off" placeholder="Host" />
+      <span class="status" id="hostJoinStatus">connecting…</span>
+    </div>
+    <div class="host-editor-wrap">
+      <div class="host-prompt-banner hidden" id="hostPromptBanner"></div>
+      <textarea id="hostEditor" disabled placeholder="Set your name. The textarea unlocks when the round starts." spellcheck="false"></textarea>
+      <div class="host-editor-meta">
+        <span><span id="hostWordCount">0</span> words</span>
+        <span id="hostRoundClock"></span>
+      </div>
+    </div>
+  </section>
 </main>
+<div class="host-reset-toast" id="hostResetToast"></div>
 <div class="overlay hidden" id="endOverlay">
   <div class="box">
     <h2>🏆 <span id="endTitle">Victory!</span></h2>
@@ -165,12 +279,9 @@
     </div>
     <div class="close-row">
       <button class="secondary" id="copyRecap" disabled>📋 Copy recap</button>
-      <button class="secondary" id="downloadRecap" disabled>⬇ Download .txt</button>
-      <button class="secondary" id="closeEnd">Close</button>
     </div>
   </div>
 </div>
-<footer>If anyone idles for 5s, everyone's text is wiped.</footer>
 <script>
   document.getElementById('origin').textContent = location.host;
   const codeEl = document.getElementById('code');
@@ -181,16 +292,78 @@
   let started = false;
   let resetFlashTimer = null;
   let selectedDurationMs = 300000;
-  let selectedMode = 'iased';
+  let selectedMode = 'classic';
 
   const durationOptions = document.getElementById('durationOptions');
+  const customDurationWrap = document.getElementById('customDurationWrap');
+  const customDurationInput = document.getElementById('customDuration');
+  function customMs() {
+    const mins = Number(customDurationInput.value);
+    if (!Number.isFinite(mins)) return 180_000;
+    const clamped = Math.max(0.25, Math.min(60, mins));
+    return Math.round(clamped * 60_000);
+  }
   durationOptions.addEventListener('click', (e) => {
     const btn = e.target.closest('.duration-btn');
     if (!btn || started) return;
-    selectedDurationMs = Number(btn.dataset.ms);
     for (const b of durationOptions.querySelectorAll('.duration-btn')) {
       b.classList.toggle('selected', b === btn);
     }
+    if (btn.dataset.custom) {
+      customDurationWrap.style.display = 'flex';
+      selectedDurationMs = customMs();
+    } else {
+      customDurationWrap.style.display = 'none';
+      selectedDurationMs = Number(btn.dataset.ms);
+    }
+  });
+  customDurationInput.addEventListener('input', () => {
+    if (started) return;
+    selectedDurationMs = customMs();
+  });
+
+  const PROMPTS = [
+    "A stranger sits down across from you on a train.",
+    "Write about the last day of summer.",
+    "You find an unsent letter addressed to you.",
+    "Describe a room from the perspective of the dog that lives in it.",
+    "Two characters argue about something neither of them actually cares about.",
+    "Write about a small object that someone refuses to throw away.",
+    "Something is wrong with the moon.",
+    "A character realizes they've been lying to themselves about one specific thing.",
+    "Open with: 'It was raining when she finally answered.'",
+    "Write a scene that takes place entirely in an elevator.",
+    "Describe a meal you remember in too much detail.",
+    "Someone is waiting for a phone call that won't come.",
+    "Write about a piece of music as if it were a person.",
+    "A child explains how the world works to an alien.",
+    "The protagonist returns to a place they swore they'd never visit again.",
+    "Write a confession nobody asked for.",
+    "Two strangers share an umbrella.",
+    "You wake up and something small but undeniable has changed.",
+    "Write a scene where the most important thing is what's NOT being said.",
+    "Describe a smell that takes you somewhere else.",
+    "An object in your house has started keeping secrets.",
+    "Write about the worst advice you ever followed.",
+    "A character has exactly one minute to say what they really mean.",
+    "Describe a place that no longer exists.",
+    "Someone is packing a bag. They are not coming back.",
+  ];
+  const randomPromptBtn = document.getElementById('randomPromptBtn');
+  let lastPromptIdx = -1;
+  function autosizePrompt() {
+    promptInput.style.height = 'auto';
+    promptInput.style.height = promptInput.scrollHeight + 'px';
+  }
+  randomPromptBtn.addEventListener('click', () => {
+    if (started) return;
+    let i = Math.floor(Math.random() * PROMPTS.length);
+    if (PROMPTS.length > 1 && i === lastPromptIdx) i = (i + 1) % PROMPTS.length;
+    lastPromptIdx = i;
+    promptInput.value = PROMPTS[i];
+    autosizePrompt();
+    promptInput.focus();
+    promptInput.setSelectionRange(promptInput.value.length, promptInput.value.length);
   });
 
   const modeOptions = document.getElementById('modeOptions');
@@ -208,6 +381,11 @@
     }
     modeDesc.innerHTML = MODE_DESCRIPTIONS[selectedMode] || '';
   });
+
+  const promptInputEl = document.getElementById('promptInput');
+  promptInputEl.addEventListener('input', autosizePrompt);
+  // Initial size on load (in case of resumed text)
+  requestAnimationFrame(autosizePrompt);
 
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
   const HOST_KEY = 'dw_host';
@@ -233,7 +411,6 @@
   const galleryPrev = document.getElementById('galleryPrev');
   const galleryNext = document.getElementById('galleryNext');
   const galleryHide = document.getElementById('galleryHide');
-  const downloadRecap = document.getElementById('downloadRecap');
   const copyRecap = document.getElementById('copyRecap');
   const promptInput = document.getElementById('promptInput');
   let galleryEntries = [];
@@ -242,11 +419,14 @@
   let lastRoundMs = 300000;
   let lastPrompt = '';
 
-  document.getElementById('closeEnd').onclick = () => {
+  function dismissEndOverlay() {
     endOverlay.classList.add('hidden');
     if (galleryLive) ws.send(JSON.stringify({ type: 'gallery_hide' }));
     galleryLive = false;
-  };
+  }
+  endOverlay.addEventListener('click', (e) => {
+    if (e.target === endOverlay) dismissEndOverlay();
+  });
 
   function broadcastCurrent() {
     if (!galleryEntries.length) return;
@@ -291,64 +471,17 @@
     renderGalleryPreview();
   };
 
-  function shuffled(arr) {
-    const a = arr.slice();
-    for (let i = a.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [a[i], a[j]] = [a[j], a[i]];
-    }
-    return a;
-  }
-
-  function buildRecap() {
-    const entries = shuffled(galleryEntries);
-    const lines = [];
-    lines.push('Dangerous Writing — Round Recap');
-    const d = new Date();
-    const months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
-    lines.push(`Date: ${d.getDate()} ${months[d.getMonth()]}, ${d.getFullYear()}`);
-    lines.push(`Round length: ${formatRoundDuration(lastRoundMs)}`);
-    if (lastPrompt) lines.push(`Prompt: ${lastPrompt}`);
-    lines.push(`Submissions: ${entries.length} (names anonymized, order shuffled)`);
-    lines.push('');
-    for (let i = 0; i < entries.length; i++) {
-      lines.push(`--- Anonymous ${i + 1} ---`);
-      lines.push(entries[i].text);
-      lines.push('');
-    }
-    lines.push('Played at https://dangerous-multiplayer.fly.dev');
-    return lines.join('\n');
-  }
-
   async function flashBtn(btn, text) {
     const orig = btn.textContent;
     btn.textContent = text;
     setTimeout(() => { btn.textContent = orig; }, 1500);
   }
 
-  copyRecap.onclick = async () => {
+  copyRecap.onclick = () => {
     if (!galleryEntries.length) return;
-    const text = buildRecap();
-    try { await navigator.clipboard.writeText(text); }
-    catch {
-      const ta = document.createElement('textarea');
-      ta.value = text; document.body.appendChild(ta); ta.select();
-      try { document.execCommand('copy'); } catch {}
-      ta.remove();
-    }
-    flashBtn(copyRecap, '✓ Copied!');
-  };
-
-  downloadRecap.onclick = () => {
-    if (!galleryEntries.length) return;
-    const text = buildRecap();
-    const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-    const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url; a.download = `dangerous-writing-recap_${stamp}.txt`;
-    document.body.appendChild(a); a.click(); a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    copyRecap.disabled = true;
+    flashBtn(copyRecap, 'Preparing…');
+    ws.send(JSON.stringify({ type: 'share_recap', proto: location.protocol.replace(':', ''), host: location.host }));
   };
 
   function formatRoundDuration(ms) {
@@ -361,9 +494,10 @@
     if (!rows.length) { leaderboardEl.innerHTML = '<div class="empty">No players.</div>'; return; }
     leaderboardEl.innerHTML = rows.map((p, i) => {
       const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : (i + 1);
+      const isHost = playerMyId && p.id === playerMyId;
       return `<div class="lb-row ${i === 0 ? 'gold' : ''}">
         <div class="rank">${medal}</div>
-        <div class="lb-name">${escapeHtml(p.name)}</div>
+        <div class="lb-name">${escapeHtml(p.name)}${isHost ? '<span class="host-tag">host</span>' : ''}</div>
         <div class="lb-words">${p.words} words</div>
         <div class="lb-chars">${p.chars} chars</div>
       </div>`;
@@ -381,10 +515,26 @@
       galleryCursor = 0;
       galleryLive = false;
       galleryHide.disabled = true;
-      downloadRecap.disabled = true;
       copyRecap.disabled = true;
       renderGalleryPreview();
       endOverlay.classList.remove('hidden');
+      return;
+    }
+    if (msg.type === 'recap_shared') {
+      const payload = msg.summary || msg.url;
+      (async () => {
+        try { await navigator.clipboard.writeText(payload); } catch {
+          const ta = document.createElement('textarea'); ta.value = payload; document.body.appendChild(ta); ta.select();
+          try { document.execCommand('copy'); } catch {} ta.remove();
+        }
+      })();
+      flashBtn(copyRecap, '✓ Copied');
+      setTimeout(dismissEndOverlay, 1400);
+      return;
+    }
+    if (msg.type === 'recap_share_failed') {
+      flashBtn(copyRecap, `Failed: ${msg.reason || 'try again'}`);
+      copyRecap.disabled = galleryEntries.length === 0;
       return;
     }
     if (msg.type === 'gallery_list') {
@@ -393,7 +543,6 @@
       galleryEntries = msg.entries || [];
       const idx = prevId ? galleryEntries.findIndex(e => e.id === prevId) : -1;
       galleryCursor = idx >= 0 ? idx : Math.min(galleryCursor, Math.max(0, galleryEntries.length - 1));
-      downloadRecap.disabled = galleryEntries.length === 0;
       copyRecap.disabled = galleryEntries.length === 0;
       if (wasEmpty && galleryEntries.length > 0) broadcastCurrent();
       renderGalleryPreview();
@@ -402,9 +551,11 @@
     if (msg.type === 'room_created') {
       codeEl.textContent = msg.code;
       saveHost({ code: msg.code, hostToken: msg.hostToken });
+      shareInviteBtn.disabled = false;
     } else if (msg.type === 'host_claimed') {
       codeEl.textContent = msg.code;
-      if (msg.prompt) promptInput.value = msg.prompt;
+      shareInviteBtn.disabled = false;
+      if (msg.prompt) { promptInput.value = msg.prompt; autosizePrompt(); }
       if (msg.mode) {
         selectedMode = msg.mode;
         for (const b of modeOptions.querySelectorAll('.duration-btn')) {
@@ -414,8 +565,20 @@
       }
       if (msg.roundMs) {
         selectedDurationMs = msg.roundMs;
+        let matched = false;
         for (const b of durationOptions.querySelectorAll('.duration-btn')) {
-          b.classList.toggle('selected', Number(b.dataset.ms) === msg.roundMs);
+          const isPreset = !b.dataset.custom && Number(b.dataset.ms) === msg.roundMs;
+          if (isPreset) matched = true;
+          b.classList.remove('selected');
+          if (isPreset) b.classList.add('selected');
+        }
+        if (!matched) {
+          const customBtn = durationOptions.querySelector('[data-custom]');
+          if (customBtn) customBtn.classList.add('selected');
+          customDurationInput.value = (msg.roundMs / 60_000).toString();
+          customDurationWrap.style.display = 'flex';
+        } else {
+          customDurationWrap.style.display = 'none';
         }
       }
     } else if (msg.type === 'host_claim_failed') {
@@ -423,11 +586,14 @@
       ws.send(JSON.stringify({ type: 'create_room' }));
     } else if (msg.type === 'host_state') {
       started = msg.started;
+      document.body.classList.toggle('round-live', !!started);
       startBtn.disabled = started || msg.players.length === 0;
       stopBtn.disabled = !started;
       for (const b of durationOptions.querySelectorAll('.duration-btn')) b.disabled = started;
       for (const b of modeOptions.querySelectorAll('.duration-btn')) b.disabled = started;
       promptInput.disabled = started;
+      randomPromptBtn.disabled = started;
+      customDurationInput.disabled = started;
       renderPlayers(msg.players);
       if (!resetFlashTimer) {
         banner.className = 'banner' + (started ? ' live' : '');
@@ -448,8 +614,9 @@
         if (p.idleMs > 3500) cls = 'danger';
         else if (p.idleMs > 2000) cls = 'warn';
       }
+      const isHost = playerMyId && p.id === playerMyId;
       return `<div class="player ${cls}">
-        <div class="name">${escapeHtml(p.name)}</div>
+        <div class="name">${escapeHtml(p.name)}${isHost ? '<span class="host-tag">host</span>' : ''}</div>
         <div class="words">${p.words} words</div>
         <div class="idle">${started ? idleS + 's' : '—'}</div>
       </div>`;
@@ -457,6 +624,29 @@
   }
 
   function escapeHtml(s) { return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+  const shareInviteBtn = document.getElementById('shareInvite');
+  const shareInviteStatus = document.getElementById('shareInviteStatus');
+  shareInviteBtn.onclick = async () => {
+    const c = codeEl.textContent.trim();
+    if (!c || c === '····') return;
+    const url = `${location.origin}/?code=${encodeURIComponent(c)}`;
+    const message = `Join my Dangerous Writing game — room code ${c}: ${url}`;
+    if (navigator.share) {
+      try { await navigator.share({ title: 'Dangerous Writing', text: message, url }); shareInviteStatus.textContent = 'Shared.'; return; }
+      catch (err) { if (err && err.name === 'AbortError') { shareInviteStatus.textContent = ''; return; } }
+    }
+    try {
+      await navigator.clipboard.writeText(message);
+      shareInviteStatus.textContent = '✓ Invite copied to clipboard.';
+    } catch {
+      const ta = document.createElement('textarea'); ta.value = message; document.body.appendChild(ta); ta.select();
+      try { document.execCommand('copy'); shareInviteStatus.textContent = '✓ Invite copied to clipboard.'; }
+      catch { shareInviteStatus.textContent = message; }
+      ta.remove();
+    }
+    setTimeout(() => { shareInviteStatus.textContent = ''; }, 3000);
+  };
 
   startBtn.onclick = () => {
     endOverlay.classList.add('hidden');
@@ -485,6 +675,261 @@
     }
     origOnMessage(ev);
   };
+
+  // --- Host plays from the same tab ---
+  const hostNameInput = document.getElementById('hostName');
+  const hostJoinStatus = document.getElementById('hostJoinStatus');
+  const hostEditor = document.getElementById('hostEditor');
+  const hostWordCount = document.getElementById('hostWordCount');
+  const hostRoundClock = document.getElementById('hostRoundClock');
+  const hostPromptBanner = document.getElementById('hostPromptBanner');
+  const hostDoomVignette = document.getElementById('doomVignette');
+  const hostResetToast = document.getElementById('hostResetToast');
+
+  const HOST_NAME_KEY = 'dw_host_name';
+  hostNameInput.value = (sessionStorage.getItem(HOST_NAME_KEY) || '').slice(0, 20);
+  hostNameInput.placeholder = 'enter a name to play';
+  let suppressReconnectStatus = false;
+
+  let currentRoomCode = '';
+  let playerWs = null;
+  let playerJoined = false;
+  let playerMyId = null;
+  let playerStarted = false;
+  let playerLastNonWs = 0;
+  let playerCurrentRoundMs = 300000;
+
+  const DOOM_MS_HOST = 5000;
+  const FADE_START_MS = 2000;
+
+  function hostSessionKey() { return `dw_player_${currentRoomCode}`; }
+  function loadPlayerSession() {
+    try { return JSON.parse(sessionStorage.getItem(hostSessionKey()) || 'null'); } catch { return null; }
+  }
+  function savePlayerSession(patch) {
+    if (!currentRoomCode) return;
+    const cur = loadPlayerSession() || { code: currentRoomCode, name: hostNameInput.value };
+    const next = { ...cur, ...patch, code: currentRoomCode, name: hostNameInput.value };
+    try { sessionStorage.setItem(hostSessionKey(), JSON.stringify(next)); } catch {}
+  }
+  function clearPlayerSession() {
+    try { sessionStorage.removeItem(hostSessionKey()); } catch {}
+  }
+
+  function nonWsLen(s) { return s.replace(/\s+/g, '').length; }
+  function countWords(s) { const t = s.trim(); return t ? t.split(/\s+/).length : 0; }
+
+  function setHostStatus(text, cls) {
+    hostJoinStatus.textContent = text;
+    hostJoinStatus.classList.remove('good', 'err');
+    if (cls) hostJoinStatus.classList.add(cls);
+  }
+
+  function clearHostDoomFade() {
+    hostEditor.classList.add('snap-doom');
+    hostDoomVignette.classList.add('snap-doom');
+    hostEditor.style.removeProperty('--doom-color');
+    hostEditor.style.removeProperty('--doom-opacity');
+    hostDoomVignette.style.setProperty('--doom-glow', '0');
+    void hostEditor.offsetWidth;
+    requestAnimationFrame(() => {
+      hostEditor.classList.remove('snap-doom');
+      hostDoomVignette.classList.remove('snap-doom');
+    });
+  }
+  function updateHostDoom(remaining) {
+    const idle = Math.max(0, Math.min(DOOM_MS_HOST, DOOM_MS_HOST - remaining));
+    if (idle < FADE_START_MS) { clearHostDoomFade(); return; }
+    const t = Math.min(1, (idle - FADE_START_MS) / (DOOM_MS_HOST - FADE_START_MS));
+    const r = 244, g = Math.round(244 + (68 - 244) * t), b = Math.round(245 + (68 - 245) * t);
+    hostEditor.style.setProperty('--doom-color', `rgb(${r}, ${g}, ${b})`);
+    hostEditor.style.setProperty('--doom-opacity', (1 - 0.85 * t).toFixed(3));
+    hostDoomVignette.style.setProperty('--doom-glow', (0.15 + 0.75 * t).toFixed(3));
+  }
+  function updateHostRoundClock(ms) {
+    if (!playerStarted) { hostRoundClock.textContent = ''; return; }
+    const sec = Math.max(0, Math.ceil(ms / 1000));
+    const m = Math.floor(sec / 60), s = sec % 60;
+    hostRoundClock.textContent = `${m}:${s.toString().padStart(2, '0')} left`;
+  }
+  function flashHostReset(reason) {
+    clearHostDoomFade();
+    hostResetToast.textContent = `💥 RESET — ${reason}`;
+    hostResetToast.classList.add('show');
+    document.body.classList.add('reset-flash');
+    setTimeout(() => {
+      hostResetToast.classList.remove('show');
+      document.body.classList.remove('reset-flash');
+    }, 1200);
+  }
+  function updateHostWords() { hostWordCount.textContent = countWords(hostEditor.value); }
+
+  // Restore textarea text if there's a stored session for this room
+  function applyResumedText() {
+    const saved = loadPlayerSession();
+    if (saved && saved.text) {
+      hostEditor.value = saved.text;
+      playerLastNonWs = nonWsLen(saved.text);
+      updateHostWords();
+    }
+  }
+
+  hostEditor.addEventListener('input', () => {
+    savePlayerSession({ text: hostEditor.value });
+    const nwl = nonWsLen(hostEditor.value);
+    const grewReal = nwl > playerLastNonWs;
+    playerLastNonWs = nwl;
+    updateHostWords();
+    if (!playerStarted || !playerWs || playerWs.readyState !== 1) return;
+    if (!grewReal) return;
+    playerWs.send(JSON.stringify({
+      type: 'keystroke',
+      words: countWords(hostEditor.value),
+      chars: hostEditor.value.length,
+    }));
+  });
+
+  function openPlayerWs() {
+    if (!currentRoomCode) return;
+    const name = hostNameInput.value.trim();
+    if (!name) {
+      setHostStatus('enter a name to play', 'err');
+      return;
+    }
+    closePlayerWs();
+    setHostStatus('connecting…');
+    const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+    playerWs = new WebSocket(`${proto}://${location.host}`);
+    playerWs.onopen = () => {
+      const saved = loadPlayerSession();
+      const token = saved && saved.token;
+      playerWs.send(JSON.stringify({ type: 'join_room', code: currentRoomCode, name, token }));
+    };
+    playerWs.onmessage = (ev) => {
+      const msg = JSON.parse(ev.data);
+      if (msg.type === 'joined') {
+        playerJoined = true;
+        playerMyId = msg.id;
+        savePlayerSession({ token: msg.token, name: msg.name });
+        setHostStatus(`playing as ${msg.name}`, 'good');
+        if (msg.resumed && hostEditor.value) {
+          playerWs.send(JSON.stringify({ type: 'keystroke', words: countWords(hostEditor.value), chars: hostEditor.value.length }));
+        }
+      } else if (msg.type === 'renamed') {
+        setHostStatus(`playing as ${msg.name}`, 'good');
+      } else if (msg.type === 'started') {
+        playerStarted = true;
+        hostEditor.disabled = false;
+        hostEditor.value = '';
+        savePlayerSession({ text: '' });
+        playerLastNonWs = 0;
+        updateHostWords();
+        if (typeof msg.roundMs === 'number') { playerCurrentRoundMs = msg.roundMs; updateHostRoundClock(msg.roundMs); }
+        if (msg.prompt) {
+          hostPromptBanner.innerHTML = `<b>Prompt:</b> ${escapeHtml(msg.prompt)}`;
+          hostPromptBanner.classList.remove('hidden');
+        } else {
+          hostPromptBanner.classList.add('hidden');
+        }
+        clearHostDoomFade();
+        hostNameInput.disabled = true;
+        hostEditor.focus();
+      } else if (msg.type === 'stopped') {
+        playerStarted = false;
+        hostEditor.disabled = true;
+        clearHostDoomFade();
+        updateHostRoundClock(0);
+        hostNameInput.disabled = false;
+        autoSubmitHostText();
+      } else if (msg.type === 'reset') {
+        hostEditor.value = '';
+        savePlayerSession({ text: '' });
+        playerLastNonWs = 0;
+        updateHostWords();
+        if (typeof msg.roundMs === 'number') { playerCurrentRoundMs = msg.roundMs; updateHostRoundClock(msg.roundMs); }
+        flashHostReset(msg.reason || 'someone stopped typing');
+      } else if (msg.type === 'doom') {
+        updateHostDoom(msg.remaining);
+        if (typeof msg.roundRemaining === 'number') updateHostRoundClock(msg.roundRemaining);
+      } else if (msg.type === 'round_complete') {
+        playerStarted = false;
+        hostEditor.disabled = true;
+        clearHostDoomFade();
+        updateHostRoundClock(0);
+        hostNameInput.disabled = false;
+        autoSubmitHostText();
+      } else if (msg.type === 'error') {
+        // Stale token or other issue — drop session and retry once without a token.
+        clearPlayerSession();
+        setHostStatus(`couldn't join: ${msg.message || 'error'}`, 'err');
+      }
+      // Intentionally ignored: gallery_show, gallery_hide, host_left, players
+    };
+    playerWs.onclose = () => {
+      playerJoined = false;
+      playerStarted = false;
+      if (suppressReconnectStatus) return;
+      if (!hostNameInput.value.trim()) return;
+      setHostStatus('reconnecting…');
+    };
+  }
+  function closePlayerWs() {
+    if (playerWs) {
+      suppressReconnectStatus = true;
+      try { playerWs.close(); } catch {}
+      playerWs = null;
+      setTimeout(() => { suppressReconnectStatus = false; }, 200);
+    }
+    playerJoined = false;
+  }
+
+  function autoSubmitHostText() {
+    const text = hostEditor.value;
+    if (!text.trim() || !playerWs || playerWs.readyState !== 1) return;
+    playerWs.send(JSON.stringify({ type: 'submit_text', text }));
+  }
+
+  function commitHostName() {
+    const name = hostNameInput.value.trim().slice(0, 20);
+    hostNameInput.value = name;
+    sessionStorage.setItem(HOST_NAME_KEY, name);
+    if (playerStarted) return; // locked during round
+    if (!name) {
+      clearPlayerSession();
+      closePlayerWs();
+      setHostStatus('enter a name to play');
+      return;
+    }
+    if (playerWs && playerWs.readyState === 1 && playerJoined) {
+      // In-place rename — server keeps the same player record.
+      playerWs.send(JSON.stringify({ type: 'rename', name }));
+      savePlayerSession({ name });
+      return;
+    }
+    openPlayerWs();
+  }
+  hostNameInput.addEventListener('blur', commitHostName);
+  hostNameInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); hostNameInput.blur(); }
+  });
+
+  // Hook into the existing ws.onmessage to grab the room code as soon as it arrives.
+  const __existingOnMessage = ws.onmessage;
+  ws.onmessage = (ev) => {
+    const msg = JSON.parse(ev.data);
+    if (msg.type === 'room_created' || msg.type === 'host_claimed') {
+      currentRoomCode = msg.code;
+      applyResumedText();
+      // Defer to next tick so the existing handler runs first.
+      setTimeout(() => { if (hostNameInput.value.trim()) openPlayerWs(); }, 0);
+    }
+    __existingOnMessage(ev);
+  };
+
+  window.addEventListener('beforeunload', () => {
+    savePlayerSession({ text: hostEditor.value });
+  });
 </script>
+<script src="/feedback.js" defer></script>
 </body>
 </html>
