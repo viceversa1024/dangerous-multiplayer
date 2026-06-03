@@ -303,6 +303,7 @@ function broadcastToHost(room) {
   send(room.host, {
     type: 'host_state',
     started: room.started,
+    roundRemaining: room.started ? Math.max(0, room.roundMs - (now - room.startedAt)) : 0,
     players: [...room.players.values()].map(p => ({
       id: p.id,
       name: p.name,

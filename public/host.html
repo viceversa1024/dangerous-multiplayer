@@ -145,7 +145,15 @@
   .player.danger .idle { background: var(--accent); color: white; }
   .player.warn .idle { background: var(--accent-2); color: #1c1917; }
   .empty { color: var(--muted); font-style: italic; padding: 20px; text-align: center; }
-  .banner { padding: 14px 18px; border-radius: 10px; background: #27272a; color: var(--muted); font-size: 14px; margin-bottom: 14px; }
+  .banner-row { display: flex; gap: 10px; align-items: stretch; margin-bottom: 14px; }
+  .banner { padding: 14px 18px; border-radius: 10px; background: #27272a; color: var(--muted); font-size: 14px; flex: 1; }
+  .banner-row .banner { margin-bottom: 0; }
+  .dash-clock {
+    display: flex; align-items: center; padding: 0 18px; border-radius: 10px;
+    background: #27272a; font-variant-numeric: tabular-nums; font-weight: 800; font-size: 20px; white-space: nowrap;
+  }
+  .dash-clock.low { background: var(--accent); color: white; }
+  .dash-clock.hidden { display: none; }
   .banner.live { background: var(--good); color: white; font-weight: 600; }
   .banner.reset { background: var(--accent); color: white; font-weight: 600; }
   footer { padding: 14px 24px; text-align: center; color: var(--muted); font-size: 12px; border-top: 1px solid var(--border); }
@@ -239,7 +247,10 @@
     </div>
   </div>
   <div class="panel players">
-    <div class="banner" id="banner">Waiting for players to join…</div>
+    <div class="banner-row">
+      <div class="banner" id="banner">Waiting for players to join…</div>
+      <div class="dash-clock hidden" id="dashClock"></div>
+    </div>
     <h2>Players</h2>
     <div id="playerList"><div class="empty">No one has joined yet.</div></div>
   </div>
@@ -278,7 +289,9 @@
       </div>
     </div>
     <div class="close-row">
+      <button id="playAgain">▶ Start next round</button>
       <button class="secondary" id="copyRecap" disabled>📋 Copy recap</button>
+      <button class="secondary" id="closeEnd">✕ Close</button>
     </div>
   </div>
 </div>
@@ -403,6 +416,7 @@
       ws.send(JSON.stringify({ type: 'create_room' }));
     }
   };
+  const dashClock = document.getElementById('dashClock');
   const endOverlay = document.getElementById('endOverlay');
   const endSub = document.getElementById('endSub');
   const leaderboardEl = document.getElementById('leaderboard');
@@ -424,9 +438,7 @@
     if (galleryLive) ws.send(JSON.stringify({ type: 'gallery_hide' }));
     galleryLive = false;
   }
-  endOverlay.addEventListener('click', (e) => {
-    if (e.target === endOverlay) dismissEndOverlay();
-  });
+  document.getElementById('closeEnd').onclick = dismissEndOverlay;
 
   function broadcastCurrent() {
     if (!galleryEntries.length) return;
@@ -471,10 +483,13 @@
     renderGalleryPreview();
   };
 
-  async function flashBtn(btn, text) {
-    const orig = btn.textContent;
+  const btnFlashState = new WeakMap();
+  function flashBtn(btn, text) {
+    let s = btnFlashState.get(btn);
+    if (!s) { s = { orig: btn.textContent, timer: null }; btnFlashState.set(btn, s); }
+    if (s.timer) clearTimeout(s.timer);
     btn.textContent = text;
-    setTimeout(() => { btn.textContent = orig; }, 1500);
+    s.timer = setTimeout(() => { btn.textContent = s.orig; s.timer = null; }, 1500);
   }
 
   copyRecap.onclick = () => {
@@ -529,7 +544,7 @@
         }
       })();
       flashBtn(copyRecap, '✓ Copied');
-      setTimeout(dismissEndOverlay, 1400);
+      copyRecap.disabled = galleryEntries.length === 0;
       return;
     }
     if (msg.type === 'recap_share_failed') {
@@ -587,6 +602,14 @@
     } else if (msg.type === 'host_state') {
       started = msg.started;
       document.body.classList.toggle('round-live', !!started);
+      if (started && typeof msg.roundRemaining === 'number') {
+        const sec = Math.max(0, Math.ceil(msg.roundRemaining / 1000));
+        dashClock.textContent = `${Math.floor(sec / 60)}:${(sec % 60).toString().padStart(2, '0')}`;
+        dashClock.classList.toggle('low', msg.roundRemaining < 30000);
+        dashClock.classList.remove('hidden');
+      } else {
+        dashClock.classList.add('hidden');
+      }
       startBtn.disabled = started || msg.players.length === 0;
       stopBtn.disabled = !started;
       for (const b of durationOptions.querySelectorAll('.duration-btn')) b.disabled = started;
@@ -654,6 +677,7 @@
     galleryLive = false;
     ws.send(JSON.stringify({ type: 'start', durationMs: selectedDurationMs, mode: selectedMode, prompt: promptInput.value.trim() }));
   };
+  document.getElementById('playAgain').onclick = () => startBtn.onclick();
   stopBtn.onclick = () => ws.send(JSON.stringify({ type: 'stop' }));
 
   // Flash banner on reset events — we infer resets when started and all players' idle drops to ~0 simultaneously.
